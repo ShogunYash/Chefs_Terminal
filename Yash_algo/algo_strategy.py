@@ -290,14 +290,11 @@ class AttackManager:
         #     return False  # No valid spawn locations
         
         self.best_spawn_location = [5,8]
-        if game_state.get_resource(MP) < 7:
-            # Send a single interceptor as a distraction
-            game_state.attempt_spawn(INTERCEPTOR, self.best_spawn_location, 1)
-            return False
         # Launch 7 scouts at once for a coordinated attack
         MP_nearest_integer = math.floor(game_state.get_resource(MP))
-        game_state.attempt_spawn(SCOUT, self.best_spawn_location, MP_nearest_integer)
-        self.last_attack_turn = game_state.turn_number
+        if MP_nearest_integer > 15:
+            game_state.attempt_spawn(SCOUT, self.best_spawn_location, MP_nearest_integer)
+            self.last_attack_turn = game_state.turn_number
         return True    
     
     def filter_blocked_locations(self, locations, game_state):
@@ -386,7 +383,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         ]
         self.current_funnel_index = 0
         self.last_funnel_change = -1
-        self.funnel = [[20,12], [21,12]]
+        self.funnel = [[20,12],[21,12],[22,12]]
 
     def on_game_start(self, config):
         """ 
@@ -447,35 +444,39 @@ class AlgoStrategy(gamelib.AlgoCore):
         """
         row = 12
         # Build a turret line on the front with a gap of 3 filled with walls
-        x = 2
+        x = 3
         while x <= 26:
+            if [x,row] in self.funnel:
+                continue
             game_state.attempt_spawn(TURRET, [x, row])
             x += 4
         # Fill in the gaps with walls
-        game_state.attempt_spawn(WALL, [[0, 13], [27, 13]])  
-        new_turrets = [[25, 11], [24,10]]
+        game_state.attempt_spawn(WALL, [[0, 13], [27, 13],[25, 11], [24,10]])  
+        new_turrets = [[21,10],[17,10]]
         game_state.attempt_spawn(TURRET, new_turrets)
-        game_state.attempt_upgrade(new_turrets)
         # Lastly, if we have spare SP, let's build some supports
         support_locations = [[4, 9], [5, 9], [6, 9], [7, 9]]
         game_state.attempt_spawn(SUPPORT, support_locations)
+        # Build a wall in the middle
+
         x = 1
         while x <= 26:
-            if x == 22:
+            if x == 20:
                 x = x + 3
             game_state.attempt_spawn(WALL, [x, row])
             x += 1
 
-        ## Upgrade the turret line
-        x = 2
-        while x <= 26:
-            game_state.attempt_upgrade([x, row])
-            x += 4
-        
-        game_state.attempt_upgrade([[0, 13], [27, 13]])
-        
-        # Upgrade the supports
-        game_state.attempt_upgrade(support_locations)
+        if game_state.turn_number%4 == 0:
+            game_state.attempt_upgrade(new_turrets)
+            ## Upgrade the turret line
+            x = 3
+            while x <= 26:
+                game_state.attempt_upgrade([x, row])
+                x += 4
+            
+            game_state.attempt_upgrade(new_turrets)
+            # Upgrade the supports
+            game_state.attempt_upgrade(support_locations)
 
     def build_reactive_defense(self, game_state):
         """
