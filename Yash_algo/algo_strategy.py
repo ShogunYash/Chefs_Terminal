@@ -386,6 +386,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         ]
         self.current_funnel_index = 0
         self.last_funnel_change = -1
+        self.funnel = [[20,12], [21,12]]
 
     def on_game_start(self, config):
         """ 
@@ -451,20 +452,19 @@ class AlgoStrategy(gamelib.AlgoCore):
             game_state.attempt_spawn(TURRET, [x, row])
             x += 4
         # Fill in the gaps with walls
-        game_state.attempt_spawn(WALL, [[0, 13], [27, 13], [23, 10],[22, 10]])
-        x = 1
-        while x <= 26:
-            if x == 22:
-                x = x + 3
-            game_state.attempt_spawn(WALL, [x, row])
-            x += 1
-        
+        game_state.attempt_spawn(WALL, [[0, 13], [27, 13]])  
         new_turrets = [[25, 11], [24,10]]
         game_state.attempt_spawn(TURRET, new_turrets)
         game_state.attempt_upgrade(new_turrets)
         # Lastly, if we have spare SP, let's build some supports
         support_locations = [[4, 9], [5, 9], [6, 9], [7, 9]]
         game_state.attempt_spawn(SUPPORT, support_locations)
+        x = 1
+        while x <= 26:
+            if x == 22:
+                x = x + 3
+            game_state.attempt_spawn(WALL, [x, row])
+            x += 1
 
         ## Upgrade the turret line
         x = 2
@@ -477,31 +477,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         # Upgrade the supports
         game_state.attempt_upgrade(support_locations)
 
-        # # Get high threat locations and compute defense parameters
-        # high_threat_cells = self.defense_manager.get_high_threat_locations()
-        # center = self.defense_manager.compute_center_of_threat(high_threat_cells)
-        # radius = self.defense_manager.calculate_defense_radius(high_threat_cells, center)
-        
-        # # Now add dynamic defenses based on threat analysis
-        # for x in range(max(0, center[0] - int(radius)), min(28, center[0] + int(radius) + 1)):
-        #     for y in range(max(0, center[1] - int(radius)), min(28, center[1] + int(radius) + 1)):
-        #         # Skip if location is off the map or in the enemy half
-        #         if y < 0 or y > 13:
-        #             continue
-                    
-        #         # Calculate distance from center
-        #         distance = math.sqrt((x - center[0])**2 + (y - center[1])**2)
-                
-        #         if distance <= radius:
-        #             # Place turrets at highest threat locations
-        #             if self.defense_manager.map[x][y] > 1:
-        #                 if game_state.can_spawn(TURRET, [x, y]):
-        #                     game_state.attempt_spawn(TURRET, [x, y])
-        #             # Place walls at moderate threat locations
-        #             elif self.defense_manager.map[x][y] == 2:
-        #                 if game_state.can_spawn(WALL, [x, y]):
-        #                     game_state.attempt_spawn(WALL, [x, y])
-  
     def build_reactive_defense(self, game_state):
         """
         This function builds reactive defenses based on where the enemy scored on us from.
