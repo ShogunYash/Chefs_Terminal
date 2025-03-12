@@ -289,7 +289,7 @@ class AttackManager:
         # if not best_locations:
         #     return False  # No valid spawn locations
         
-        self.best_spawn_location = [5,8]
+        self.best_spawn_location = [25,11]
         # Launch 7 scouts at once for a coordinated attack
         MP_nearest_integer = math.floor(game_state.get_resource(MP))
         if MP_nearest_integer > 15:
@@ -446,16 +446,16 @@ class AlgoStrategy(gamelib.AlgoCore):
         # Build a turret line on the front with a gap of 3 filled with walls
         x = 3
         while x <= 26:
-            if [x,row] in self.funnel:
+            if [x,row] in self.funnel or x == 7:
                 continue
             game_state.attempt_spawn(TURRET, [x, row])
             x += 4
         # Fill in the gaps with walls
         game_state.attempt_spawn(WALL, [[0, 13], [27, 13],[1,12],[2,12],[25,12],[26,12],[24,12]])  
-        new_turrets = [[21,10],[17,10]]
+        new_turrets = [[21,10],[17,10],[6,12],[8,12]]
         game_state.attempt_spawn(TURRET, new_turrets)
         # Lastly, if we have spare SP, let's build some supports
-        support_locations = [[4, 9], [5, 9]]
+        support_locations = [[22, 10], [23, 10], [24, 10]]
         game_state.attempt_spawn(SUPPORT, support_locations)
         # Build a wall in the middle
         x = 3
