@@ -290,9 +290,12 @@ class AttackManager:
         #     return False  # No valid spawn locations
         
         self.best_spawn_location = [25,11]
+        temp = 15
+        if game_state.get_resource(MP) < 5:
+            temp = 10
         # Launch 7 scouts at once for a coordinated attack
         MP_nearest_integer = math.floor(game_state.get_resource(MP))
-        if MP_nearest_integer > 15 or game_state.enemy_health < 7:
+        if MP_nearest_integer > temp:
             game_state.attempt_spawn(SCOUT, self.best_spawn_location, MP_nearest_integer)
             self.last_attack_turn = game_state.turn_number
         return True    
@@ -464,8 +467,6 @@ class AlgoStrategy(gamelib.AlgoCore):
             game_state.attempt_spawn(WALL, [x, row])
             x += 1
 
-        new_supports = [[6,9],[7,9]]
-        game_state.attempt_spawn(SUPPORT, new_supports)
         if game_state.turn_number%4 == 0:
             game_state.attempt_upgrade(new_turrets)
             ## Upgrade the turret line
