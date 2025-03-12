@@ -451,21 +451,22 @@ class AlgoStrategy(gamelib.AlgoCore):
             game_state.attempt_spawn(TURRET, [x, row])
             x += 4
         # Fill in the gaps with walls
-        game_state.attempt_spawn(WALL, [[0, 13], [27, 13],[25, 11], [24,10]])  
+        game_state.attempt_spawn(WALL, [[0, 13], [27, 13],[1,12],[2,12],[25,12],[26,12],[24,12]])  
         new_turrets = [[21,10],[17,10]]
         game_state.attempt_spawn(TURRET, new_turrets)
         # Lastly, if we have spare SP, let's build some supports
-        support_locations = [[4, 9], [5, 9], [6, 9], [7, 9]]
+        support_locations = [[4, 9], [5, 9]]
         game_state.attempt_spawn(SUPPORT, support_locations)
         # Build a wall in the middle
-
-        x = 1
+        x = 3
         while x <= 26:
             if x == 20:
                 x = x + 3
             game_state.attempt_spawn(WALL, [x, row])
             x += 1
 
+        new_supports = [[6,9],[7,9]]
+        game_state.attempt_spawn(SUPPORT, new_supports)
         if game_state.turn_number%4 == 0:
             game_state.attempt_upgrade(new_turrets)
             ## Upgrade the turret line
@@ -473,8 +474,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             while x <= 26:
                 game_state.attempt_upgrade([x, row])
                 x += 4
-            
-            game_state.attempt_upgrade(new_turrets)
+        
             # Upgrade the supports
             game_state.attempt_upgrade(support_locations)
 
