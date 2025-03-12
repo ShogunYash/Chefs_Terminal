@@ -290,7 +290,7 @@ class AttackManager:
         #     return False  # No valid spawn locations
         
         self.best_spawn_location = [25,11]
-        temp = 15
+        temp = 13
         if game_state.get_resources(1)[1] > 10 and game_state.turn_number > 5:
             game_state.attempt_spawn(INTERCEPTOR, [25,11], 1)
         if game_state.get_resource(MP) < 5:
@@ -500,7 +500,6 @@ class AlgoStrategy(gamelib.AlgoCore):
                 gamelib.debug_write("Got scored on at: {}".format(location))
                 self.scored_on_locations.append(location)
                 gamelib.debug_write("All locations: {}".format(self.scored_on_locations))
-
 
 if __name__ == "__main__":
     algo = AlgoStrategy()
