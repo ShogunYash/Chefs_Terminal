@@ -291,6 +291,8 @@ class AttackManager:
         
         self.best_spawn_location = [25,11]
         temp = 15
+        if game_state.get_resources(1)[1] > 9:
+            game_state.attempt_spawn(INTERCEPTOR, [25,11], 1)
         if game_state.get_resource(MP) < 5:
             temp = 10
         # Launch 7 scouts at once for a coordinated attack
