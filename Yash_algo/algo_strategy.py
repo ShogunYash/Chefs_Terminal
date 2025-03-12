@@ -291,7 +291,7 @@ class AttackManager:
         
         self.best_spawn_location = [25,11]
         temp = 15
-        if game_state.get_resources(1)[1] > 9 and game_state.turn_number > 5:
+        if game_state.get_resources(1)[1] > 10 and game_state.turn_number > 5:
             game_state.attempt_spawn(INTERCEPTOR, [25,11], 1)
         if game_state.get_resource(MP) < 5:
             temp = 10
