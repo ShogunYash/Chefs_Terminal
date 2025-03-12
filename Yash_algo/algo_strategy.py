@@ -291,7 +291,7 @@ class AttackManager:
         
         self.best_spawn_location = [25,11]
         temp = 13
-        if game_state.get_resources(1)[1] > 10 and game_state.turn_number > 5:
+        if game_state.get_resources(1)[1] > 10 and game_state.turn_number > 3:
             game_state.attempt_spawn(INTERCEPTOR, [25,11], 1)
         if game_state.get_resource(MP) < 5:
             temp = 10
@@ -456,7 +456,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             x += 4
         # Fill in the gaps with walls
         game_state.attempt_spawn(WALL, [[0, 13], [27, 13],[1,12],[2,12],[25,12],[26,12],[24,12], [19,13]])  
-        new_turrets = [[21,10],[17,10],[6,12],[8,12]]
+        new_turrets = [[21,10],[19,10],[6,12],[8,12]]
         game_state.attempt_spawn(TURRET, new_turrets)
         # Lastly, if we have spare SP, let's build some supports
         support_locations = [[22, 10], [23, 10], [24, 10]]
@@ -468,17 +468,17 @@ class AlgoStrategy(gamelib.AlgoCore):
                 x = x + 3
             game_state.attempt_spawn(WALL, [x, row])
             x += 1
-
-        if game_state.turn_number%4 == 0:
+        game_state.attempt_upgrade(new_turrets[0])
+        game_state.attempt_upgrade(support_locations[2])
+        # Upgrade the defenses in the funnel
+        if (game_state.turn_number+1) % 2 == 0 and game_state.turn_number > 4:
             game_state.attempt_upgrade(new_turrets)
+            game_state.attempt_upgrade(support_locations)
             ## Upgrade the turret line
             x = 3
             while x <= 26:
                 game_state.attempt_upgrade([x, row])
                 x += 4
-        
-            # Upgrade the supports
-            game_state.attempt_upgrade(support_locations)
 
     def on_action_frame(self, turn_string):
         """
