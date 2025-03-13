@@ -32,11 +32,11 @@ class AttackManager:
     def calculate_sp_removed(self,all_units):
         #for walls
         walls=all_units["walls"]
-        wall_sp_removed=sum([0.75*(2+wall.upgraded)*(wall.health/(50+70*wall.upgraded)) for wall in walls])
+        wall_sp_removed=sum([0.75*(2+wall.upgraded)*(wall.health/(50+70*wall.upgraded)) for wall in walls if wall.pending_removal])
         turrets=all_units["turrets"]
-        turret_sp_removed=sum([0.75*(3+8*turret.upgraded)*(turret.health/(70+0*turret.upgraded)) for turret in turrets])
+        turret_sp_removed=sum([0.75*(3+8*turret.upgraded)*(turret.health/(70+0*turret.upgraded)) for turret in turrets if turret.pending_removal])
         supports=all_units["supports"]
-        support_sp_removed=sum([0.75*(4+4*support.upgraded)*(support.health/(20+0*support.upgraded)) for support in supports])
+        support_sp_removed=sum([0.75*(4+4*support.upgraded)*(support.health/(20+0*support.upgraded)) for support in supports if support.pending_removal])
         return [wall_sp_removed,turret_sp_removed,support_sp_removed]
 
     def execute_attack(self, game_state):
@@ -51,8 +51,8 @@ class AttackManager:
         interceptor_spawn_location=[22,8]
         min_scouts=13
         enemy_defenses=self.enemy_stationary_units(game_state)
-        w1=0.8
-        w2=0.2
+        w1=0.9
+        w2=0.1
         normalizing_factor=25
         def calculate_threat_score():
             current_enemy_supports=0
@@ -82,8 +82,10 @@ class AttackManager:
         gamelib.debug_write("\n no. of interceptors -",num_interceptors)
 
         interceptor_threshold = 9     #min enemy mp to send interceptor
-        if enemy_MP >= interceptor_threshold and game_state.turn_number >=2 and my_MP<min_scouts:
-            game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, num_interceptors)
+        if enemy_MP >= interceptor_threshold and game_state.turn_number >=3 and my_MP<min_scouts:
+            if(num_interceptors==2):
+                game_state.attempt_spawn(INTERCEPTOR, [4,9], 1)
+            game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, 1)
         if game_state.enemy_health <= 5:
             min_scouts = 10
 
@@ -152,65 +154,60 @@ class AlgoStrategy(gamelib.AlgoCore):
         """
         # Y coordinate of the defense line
         y = 12
-        # Wall locations 
-        wall_locations = [[0, 13], [27, 13]]
-        game_state.attempt_spawn(WALL, wall_locations)
         # Above turret walls
-        turrets_walls = [[3,13],[6,13]]
+        turrets_walls = [[3, 13], [6, 13]]
         # First deployable turrets
-        base_turrets = [[15,12],[18,12]]
+        base_turrets = [[18, 12], [21, 12]]
         game_state.attempt_spawn(TURRET, base_turrets)
+        
         # Build walls from left to right
-        if game_state.turn_number < 2 :
-            x = 1
-            while x <= 26 :
-                if [x,y] in self.funnel :
-                    x += 1
+        if game_state.turn_number < 2:
+            for x in range(1, 27):
+                if [x, y] in self.funnel:
                     continue
                 game_state.attempt_spawn(WALL, [x, y])
-                x += 1
-        # Build walls from right to left and not on funnel locations        
-        if game_state.turn_number > 3 :
-            x = 26
-            while x >= 1 :
-                if [x,y] in self.funnel or x % 3 == 0:
-                    x -= 1
-                    continue
-                game_state.attempt_spawn(WALL, [x, y])
-                x -= 1
-        # Build a turret line on the front with walls in between
-        if game_state.turn_number == 2 :
-            # Remove walls where turret need to be deployed
-            x = 3
-            while x <= 26 :
-                if x == 15 or x == 18 :
-                    x += 3
-                    continue
-                game_state.attempt_remove([x,y])
-                x += 3
-        x = 3
-        while x <= 26 :
+
+        # Build turrets on the front
+        for x in range(3, 27, 3):
             game_state.attempt_upgrade(turrets_walls)
             game_state.attempt_spawn(TURRET, [x, y])
-            x += 3
+                
+        # Build a turret line on the front with walls in between
+        if game_state.turn_number == 2:
+            for x in range(3, 27, 3):
+                if(game_state.game_map[x,y]):
+                    unit = game_state.game_map[x,y][0]
+                    if unit.unit_type == "DF":
+                        continue
+                game_state.attempt_remove([x, y])
+
+        # Wall locations 
+        wall_locations = [[0, 13], [27, 13]]
+        game_state.attempt_spawn(WALL, wall_locations)     
+                   
+        # Build walls from right to left and not on funnel locations        
+        if game_state.turn_number >= 3:
+            for x in range(26, -1, -1):
+                if [x, y] in self.funnel or x % 3 == 0:
+                    continue
+                game_state.attempt_spawn(WALL, [x, y])  
+        
+        game_state.attempt_spawn(TURRET, [23, 11])
         # Build walls in front of turrets
         game_state.attempt_spawn(WALL, turrets_walls)
-        game_state.attempt_spawn(TURRET, [23,11])
-        # Support loactions 
-        support_locations = [[2,11],[3,11],[4,11],[3,10]]
-        i = 0 
-        while i < 4 :
+        
+        # Support locations 
+        support_locations = [[2, 11], [3, 11], [4, 11], [3, 10]]
+        for i in range(4):
             game_state.attempt_upgrade(support_locations[i])
             game_state.attempt_spawn(SUPPORT, support_locations[i])
-            i += 1
+        
         # Upgrade defenses
-        if game_state.turn_number > 4 :
+        if game_state.turn_number > 4:
             # Upgrade Turrets
-            game_state.attempt_upgrade([23,11])
-            x = 3
-            while x <= 26 :
-                game_state.attempt_upgrade([x,y])
-                x += 3    
+            game_state.attempt_upgrade([23, 11])
+            for x in range(3, 27, 3):
+                game_state.attempt_upgrade([x, y])
         
 if __name__ == "__main__":
     algo = AlgoStrategy()
