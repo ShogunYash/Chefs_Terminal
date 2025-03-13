@@ -118,6 +118,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.funnel = [[22,12]]
         self.support_index = 0
         self.turrets_index = 0
+        self.edge_wall_index = 0
 
     def on_game_start(self, config):
         """ 
@@ -187,6 +188,11 @@ class AlgoStrategy(gamelib.AlgoCore):
                     continue
                 game_state.attempt_spawn(WALL, [x, y])
 
+        # Wall locations 
+        wall_locations = [[0, 13], [27, 13]]
+        game_state.attempt_spawn(WALL, wall_locations[self.edge_wall_index])   
+        self.edge_wall_index = (self.edge_wall_index + 1) % 2
+
         # Build turrets on the front
         for x in range(3, 27, 3):
             game_state.attempt_spawn(TURRET, [x, y])
@@ -205,11 +211,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                 if Current_Sp >= 3:
                     game_state.attempt_remove([x, y])
                     Current_Sp -= 3
-            
-        # Wall locations 
-        wall_locations = [[0, 13], [27, 13]]
-        game_state.attempt_spawn(WALL, wall_locations)     
-                   
+                               
         # Build walls from right to left and not on funnel locations        
         if game_state.turn_number >= 3:
             for x in range(26, -1, -1):
