@@ -73,7 +73,7 @@ class AttackManager:
             #now add sp gained from removing turrets and walls(ignore supports as if someone removed support they wouldnt attack next)
             future_additional_enemy_supports=(self.calculate_sp_removed(enemy_defenses)[0]+self.calculate_sp_removed(enemy_defenses)[1])//4
             gamelib.debug_write("\n future_enemy_supports-",future_additional_enemy_supports)
-            p = (w1*enemy_MP)(((current_enemy_supports+future_additional_enemy_supports)**1.1)/w2 + 0.2)
+            p = (w1*enemy_MP)**(((current_enemy_supports+future_additional_enemy_supports)**1.1)/w2 + 0.2)
             return min(0.9, p/ normalizing_factor)
 
         interception_probability = calculate_threat_score() * interceptor_cooldown_factor
