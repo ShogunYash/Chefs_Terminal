@@ -119,8 +119,8 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.support_index = 0
         self.turrets_index = 0
         self.edge_wall_index = 0
-        self.turret_index = 6
-        self.turrets_list = [3, 6, 9, 12, 15, 18, 21, 24]
+        self.turret_index = 5
+        self.turrets_list = [3, 6, 9, 12, 18, 21, 24]
 
     def on_game_start(self, config):
         """ 
@@ -213,8 +213,11 @@ class AlgoStrategy(gamelib.AlgoCore):
                     game_state.attempt_remove([x, y])
                     Current_Sp -= 3
 
-        game_state.attempt_upgrade([[self.turrets_list[self.turret_index]], y])       
-        self.turret_index = (self.turret_index + 6) % 8  
+        if(game_state.game_map[self.turrets_list[self.turret_index],y]):
+            unit = game_state.game_map[self.turrets_list[self.turret_index],y][0]
+            if unit.unit_type == "DF" :
+                game_state.attempt_upgrade([self.turrets_list[self.turret_index], y])       
+                self.turret_index = (self.turret_index + 6) % 7  
 
         # Build walls from right to left and not on funnel locations        
         if game_state.turn_number >= 3:
