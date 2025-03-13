@@ -280,7 +280,7 @@ class AttackManager:
     def execute_attack(self, game_state):
         """
         Executes the attack strategy:
-        - If we have 7+ MP, send 7 scouts from the best location
+        - If we have 13+ MP, send 7 scouts from the best location
         - Otherwise, send a single interceptor as a distraction
         """
         # Find the best spawn locations
@@ -288,17 +288,23 @@ class AttackManager:
         
         # if not best_locations:
         #     return False  # No valid spawn locations
-        
-        self.best_spawn_location = [25,11]
-        temp = 13
-        if game_state.get_resources(1)[1] > 10 and game_state.turn_number > 3:
-            game_state.attempt_spawn(INTERCEPTOR, [25,11], 1)
-        if game_state.get_resource(MP) < 5:
-            temp = 10
-        # Launch 7 scouts at once for a coordinated attack
-        MP_nearest_integer = math.floor(game_state.get_resource(MP))
-        if MP_nearest_integer > temp:
-            game_state.attempt_spawn(SCOUT, self.best_spawn_location, MP_nearest_integer)
+        enemy_MP=game_state.get_resources(1)[1]
+        my_MP=game_state.get_resources(0)[1]
+        # self.best_spawn_location = [25,11]
+        scout_spawn_location= [2,11]
+        interceptor_spawn_location=[25,11]
+        min_scouts=13
+
+        interceptor_threshold = 13     #min enemy mp to send interceptor
+        if enemy_MP >= interceptor_threshold and 7>= game_state.turn_number >=4 and my_MP<=min_scouts:
+            game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, 1)
+        if enemy_MP <= 5:
+            min_scouts = 10
+
+        # Launch many scouts at once for a coordinated attack is min_scouts
+
+        if my_MP >= min_scouts:
+            game_state.attempt_spawn(SCOUT, scout_spawn_location, math.floor(my_MP))
             self.last_attack_turn = game_state.turn_number
         return True    
     
