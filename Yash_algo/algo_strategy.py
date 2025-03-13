@@ -9,7 +9,8 @@ class AttackManager:
     def __init__(self):
         self.last_attack_turn = 0  # Track when we last attacked
         self.last_interceptor_turn = 0  # Track when we last used interceptors
-    
+        self.consecutive_interceptor_uses = 0  # Track consecutive uses
+
     def enemy_stationary_units(self, game_state):
             walls=[]
             turrets=[]
@@ -41,7 +42,6 @@ class AttackManager:
         return [wall_sp_removed,turret_sp_removed,support_sp_removed]
 
     def execute_attack(self, game_state):
-        
         """
         Executes the attack strategy:
         - If we have 13+ MP, send 13 scouts from the best location
@@ -50,7 +50,17 @@ class AttackManager:
         # Calculate time since last interceptor usage
         turns_since_interceptor = game_state.turn_number - self.last_interceptor_turn
         
-        interceptor_cooldown_factor = min(1.0, turns_since_interceptor / 3.0)
+        if turns_since_interceptor >1:
+            self.consecutive_interceptor_uses = 0
+            interceptor_cooldown_factor = 1.0  # Full probability
+        else:
+            # Apply the specific decay pattern: 1 -> 3/5 -> 2/5
+            if self.consecutive_interceptor_uses == 0:
+                interceptor_cooldown_factor = 1.0
+            elif self.consecutive_interceptor_uses == 1:
+                interceptor_cooldown_factor = 0.6
+            else:
+                interceptor_cooldown_factor = 0.4
         
         enemy_MP = game_state.get_resources(1)[1]
         my_MP = game_state.get_resources(0)[1]
@@ -58,9 +68,9 @@ class AttackManager:
         interceptor_spawn_location = [21, 7]
         min_scouts = 13
         enemy_defenses = self.enemy_stationary_units(game_state)
-        w1=1
+        w1=1.3
         w2=3
-        normalizing_factor=30
+        normalizing_factor=50*(max(int(game_state.turn_number)-5 , 1))**(0.2)
         def calculate_threat_score():
             current_enemy_supports=0
             for unit in enemy_defenses["supports"]:
@@ -97,7 +107,9 @@ class AttackManager:
             if(num_interceptors==2 and enemy_MP>=12):
                 game_state.attempt_spawn(INTERCEPTOR, [5,8], 1)
             game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, 1)
+
             self.last_interceptor_turn = game_state.turn_number
+            self.consecutive_interceptor_uses += 1
         
 
         # Launch many scouts at once for a coordinated attack is min_scouts
@@ -106,7 +118,7 @@ class AttackManager:
         if my_MP >= min_scouts:
             game_state.attempt_spawn(SCOUT, scout_spawn_location, math.floor(my_MP))
             self.last_attack_turn = game_state.turn_number
-        return True  
+        return True
 
 class AlgoStrategy(gamelib.AlgoCore):
     def __init__(self):
