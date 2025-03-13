@@ -213,9 +213,9 @@ class AlgoStrategy(gamelib.AlgoCore):
                     game_state.attempt_remove([x, y])
                     Current_Sp -= 3
 
-        game_state.attempt_upgrade([[self.turret_list[self.turret_index]], y])       
+        game_state.attempt_upgrade([[self.turrets_list[self.turret_index]], y])       
         self.turret_index = (self.turret_index + 6) % 8  
-              
+
         # Build walls from right to left and not on funnel locations        
         if game_state.turn_number >= 3:
             for x in range(26, -1, -1):
