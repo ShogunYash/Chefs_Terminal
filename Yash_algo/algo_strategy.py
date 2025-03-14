@@ -128,10 +128,7 @@ class AttackManager:
         Returns a weighted sum of the damage it incurs and the damage it causes. We want it to  cause maximum 
         damage and incur minimum possible damage
         """
-        weight1,weight2 = 1,1
-        MAX_DAMAGE_TO_INCUR = 200
         damages = []
-        safe=True
         # Get the damage estimate each path will take
         for location in location_options:
             path = game_state.find_path_to_edge(location)
@@ -141,13 +138,12 @@ class AttackManager:
             for path_location in path:
                 # Get number of enemy turrets that can attack each location and multiply by turret damage
                 damage_incurred += len(game_state.get_attackers(path_location, 0)) * gamelib.GameUnit(TURRET, game_state.config).damage_i
-                if damage_incurred >= MAX_DAMAGE_TO_INCUR: safe=False
                 # Get number of enemy supports that are attacked at each location and multiply by scout damage
                 damage_to_supports += len(self.get_supports_attacked_by_scout(game_state,path_location)) * gamelib.GameUnit(SCOUT, game_state.config).damage_i
-            damages.append(weight1*damage_to_supports - weight2*damage_incurred)
+            damages.append(damage_to_supports - damage_incurred)
 
         # Now just return the location that takes the least damage and gives maximum damage to support
-        return safe,location_options[damages.index(min(damages))]
+        return location_options[damages.index(min(damages))]
 
     
     def execute_attack(self, game_state):
@@ -180,7 +176,7 @@ class AttackManager:
         # Calculate threat score
         current_enemy_supports = sum([(1 + unit.upgraded) for unit in enemy_defenses["supports"] ])
         prev_enemy_supports=sum([(1 + unit.upgraded) for unit in self.previous_enemy_units["supports"] ])
-        future_supports = ((sp_gained_from_removal-enemy_sp_gained_due_to_attack)//4)**(1.7)
+        future_supports = ((max(0,(sp_gained_from_removal-enemy_sp_gained_due_to_attack)))//4)**(1.7)
         
         w1, w2 = 1.4, 3
         normalizing_factor = 35 * (max(int(game_state.turn_number) - 5, 1)) ** 0.1
@@ -277,153 +273,86 @@ class AlgoStrategy(gamelib.AlgoCore):
         """
         Build defenses using our threat-based approach combined with some hardcoded locations.
         """
+
         # Y coordinate of the defense line
         y = 12
-        # Above turret walls
-        turrets_walls = [[3, 13], [6, 13]]
-        # First deployable turrets
-        base_turrets = [[18, 12], [21, 12]]
-        game_state.attempt_spawn(TURRET, base_turrets)
         # Build turrets on the front
         for x in range(3, 27, 3):
             game_state.attempt_spawn(TURRET, [x, y])
 
         # Wall locations 
         wall_locations = [[0, 13], [27, 13]]
-        game_state.attempt_spawn(WALL, wall_locations[self.edge_wall_index])   
-        self.edge_wall_index = (self.edge_wall_index + 1) % 2
+        game_state.attempt_spawn(WALL, wall_locations)   
+
+        if game_state.turn_number == 0:
+            i = 1   
+            j = 26
+            while i <= j:
+                if game_state.turn_number == 0 and i == 4 and j == 23:
+                    break
+                if [i, y] in self.funnel or i % 3 == 0:
+                    i += 1
+                    continue
+                if [j, y] in self.funnel or j % 3 == 0 or j == 23:
+                    j -= 1
+                    continue 
+                game_state.attempt_spawn(WALL, [i, y])
+                game_state.attempt_spawn(WALL, [j, y])
+                i += 1
+                j -= 1
+        else :
+            for x in range(1, 27, 1):
+                if x % 3 != 0 and [x, y] and not (22<=x<=23) :
+                    game_state.attempt_spawn(WALL, [x, y])
 
         # Upgrade and deploy supports one at a time
         # Support locations 
-        support_locations = [[3, 11], [6, 11], [9, 11], [12, 11]]
-        game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])
-        if game_state.turn_number > 3 and game_state.get_resources(0)[0] >= 10:
-            game_state.attempt_upgrade(support_locations[self.support_index])
-        self.support_index = (self.support_index + 1) % 4
-        # attack_bool = self.attack_manager.track_enemy_defense_changes(game_state)["turrets"]["total"] < 5 and game_state.turn_number != 0
-        # if game_state.turn_number < 3 and attack_bool:
-        #     game_state.attempt_spawn(SCOUT, [3, 10], math.floor(game_state.get_resources(0)[1]))
-
-        i = 1 
-        j = 26
-        while i <= j:
-            if [i, y] in self.funnel or i % 3 == 0:
-                i += 1
-                continue
-            if [j, y] in self.funnel or j % 3 == 0:
-                j -= 1
-                continue 
-            game_state.attempt_spawn(WALL, [i, y])
-            game_state.attempt_spawn(WALL, [j, y])
-            i += 1
-            j -= 1
+        support_locations = [[2, 11], [6, 11], [9, 11], [12, 11]]
+        if game_state.turn_number == 0:
+            game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])
+            self.support_index = (self.support_index + 1) % 4  
         
+        # Add wall for protecting left most turret and if possible upgrade it
+        if(game_state.game_map[6,y]):
+            unit = game_state.game_map[6,y][0]
+            if unit.unit_type == "DF" :
+                game_state.attempt_upgrade([6, y+1])
+                game_state.attempt_spawn(WALL,[6, y+1])
+                        
+        # Build turrets on the front
+        game_state.attempt_spawn(TURRET, [22, 10])
+
+        if game_state.turn_number > 3 :
+            if game_state.attempt_upgrade(support_locations) > 0:
+                self.support_index = 3
+            else:
+                game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])
+                self.support_index = (self.support_index + 1) % 4  
+
+        # Attempt create walls to protect upgraded turrets
+        for x in range(6, 27, 3):
+            if(game_state.game_map[x,y]):
+                unit = game_state.game_map[x,y][0]
+                if unit.unit_type == "DF" and unit.health > 35 and game_state.get_resources(0)[0] >= 10:
+                    game_state.attempt_upgrade([x, y])
+                    game_state.attempt_spawn(WALL,[x, y+1])
+
+        # Attempt Upgrade walls protecting turrets
+        for x in range(1, 26, 1):
+            game_state.attempt_upgrade([x, y+1])
+
         # Check turrets health and remove if less than 30
         for x in range(3, 27, 3):
             if(game_state.game_map[x,y]):
                 unit = game_state.game_map[x,y][0]
-                if unit.unit_type == "DF" and unit.health < 26:
-                    if game_state.turn_number > 2:
+                if game_state.turn_number >= 3:
+                    if unit.unit_type == "DF" and unit.health < 30:
+                            game_state.attempt_remove([x, y])
+                    elif unit.unit_type == "FF" and unit.health < 25:
                         game_state.attempt_remove([x, y])
-                    else :
-                        game_state.attempt_spawn(WALL, [x, y+1])
+                    elif unit.unit_type == "FF" and unit.health >= 40:
+                        game_state.attempt_upgrade([x, y])
 
-        # # Build walls from left to right
-        # if game_state.turn_number < 2:
-        #     for x in range(1, 27):
-        #         if [x, y] in self.funnel:
-        #             continue
-        #         game_state.attempt_spawn(WALL, [x, y])
-
-        # Wall locations 
-        wall_locations = [[0, 13], [27, 13]]
-        game_state.attempt_spawn(WALL, wall_locations[self.edge_wall_index])   
-        self.edge_wall_index = (self.edge_wall_index + 1) % 2
-
-        # Build turrets on the front
-        for x in range(3, 27, 3):
-            game_state.attempt_spawn(TURRET, [x, y])
-        
-        # Upgrade turret walls
-        game_state.attempt_upgrade(turrets_walls[self.turrets_index])
-        self.turrets_index = (self.turrets_index + 1) % 2
-        # Build a turret line on the front with walls in between
-        Current_Sp = game_state.get_resources(0)[0] + 5
-        if game_state.turn_number >= 2:
-            for x in range(3, 27, 3):
-                if(game_state.game_map[x,y]):
-                    unit = game_state.game_map[x,y][0]
-                    if unit.unit_type == "DF":
-                        continue
-                if Current_Sp >= 3:
-                    game_state.attempt_remove([x, y])
-                    Current_Sp -= 3
-                               
-        # Build walls from right to left and not on funnel locations        
-        if game_state.turn_number >= 3:
-            for x in range(26, -1, -1):
-                if [x, y] in self.funnel or x % 3 == 0:
-                    continue
-                game_state.attempt_spawn(WALL, [x, y])  
-        
-        game_state.attempt_spawn(TURRET, [23, 11])
-        # Build walls in front of turrets
-        game_state.attempt_spawn(WALL, turrets_walls)
-        
-        # Support locations 
-        support_locations = [[2, 11], [3, 11], [4, 11], [3, 10]]
-        # for i in range(4):
-        #     game_state.attempt_upgrade(support_locations[i])
-        #     game_state.attempt_spawn(SUPPORT, support_locations[i])
-
-        # Upgrade and deploy supports one at a time
-        game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])
-        game_state.attempt_upgrade(support_locations[self.support_index])
-        self.support_index = (self.support_index + 1) % 4
-
-        # Upgrade defenses and Advancing the defense line
-        if game_state.turn_number > 4:
-            new_turrets = [[18,10], [13,9]]
-            game_state.attempt_spawn(TURRET, new_turrets)
-            # Upgrade Turrets
-            game_state.attempt_upgrade([23, 11])
-            for x in range(3, 27, 3):
-                game_state.attempt_upgrade([x, y])
-        
-        # Remove walls to get SP and build turrets
-        # Current_Sp = game_state.get_resources(0)[0] + 5
-        # if game_state.turn_number >= 2:
-        #     for x in range(3, 27, 3):
-        #         if(game_state.game_map[x,y]):
-        #             unit = game_state.game_map[x,y][0]
-        #             if unit.unit_type == "DF":
-        #                 continue
-        #         if Current_Sp >= 3:
-        #             game_state.attempt_remove([x, y])
-        #             Current_Sp -= 3        
-        if(game_state.game_map[self.turrets_list[self.turret_index],y]):
-            unit = game_state.game_map[self.turrets_list[self.turret_index],y][0]
-            if unit.unit_type == "DF" :
-                game_state.attempt_upgrade([self.turrets_list[self.turret_index], y])       
-                self.turret_index = (self.turret_index + 6) % 7  
-
-        # # Build walls from right to left and not on funnel locations        
-        # if game_state.turn_number >= 3:
-        #     for x in range(26, -1, -1):
-        #         if [x, y] in self.funnel or x % 3 == 0:
-        #             continue
-        #         game_state.attempt_spawn(WALL, [x, y])  
-        
-        game_state.attempt_spawn(TURRET, [22, 10])
-        
-        # Upgrade defenses and Advancing the defense line
-        if game_state.turn_number > 4:
-            game_state.number_affordable(WALL) > 2
-            for x in range(21, 15, -1):
-                if not(game_state.get_resources(0)[0] <= 4):
-                    game_state.attempt_spawn(WALL, [x, 10])
-                else:
-                    break
     def on_action_frame(self, turn_string):
         state = json.loads(turn_string)
         
