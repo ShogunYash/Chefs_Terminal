@@ -20,37 +20,6 @@ class AttackManager:
         # Add turn tracking to avoid redundant processing
         self.last_processed_turn = -1
 
-    def track_enemy_defense_changes(self, game_state):
-        # Get current enemy defenses
-        enemy_defenses = self.enemy_stationary_units(game_state)
-
-        # Count total defenses
-        total_walls = len(enemy_defenses["walls"])
-        total_turrets = len(enemy_defenses["turrets"])
-        total_supports = len(enemy_defenses["supports"])
-        total_defenses = total_walls + total_turrets + total_supports
-        
-        # Count pending removals
-        removed_walls = sum(1 for wall in enemy_defenses["walls"] if wall.pending_removal)
-        removed_turrets = sum(1 for turret in enemy_defenses["turrets"] if turret.pending_removal)
-        removed_supports = sum(1 for support in enemy_defenses["supports"] if support.pending_removal)
-        total_removed = removed_walls + removed_turrets + removed_supports
-        
-        gamelib.debug_write("\nEnemy defenses - Total: {}, Removed: {}".format(total_defenses, total_removed))
-        gamelib.debug_write("\nWalls: {}/{}, Turrets: {}/{}, Supports: {}/{}".format(
-            removed_walls, total_walls,
-            removed_turrets, total_turrets,
-            removed_supports, total_supports
-        ))
-        
-        return {
-            "total": total_defenses,
-            "removed": total_removed,
-            "walls": {"total": total_walls, "removed": removed_walls},
-            "turrets": {"total": total_turrets, "removed": removed_turrets},
-            "supports": {"total": total_supports, "removed": removed_supports}
-        }
-
     def enemy_stationary_units(self, game_state):
             walls=[]
             turrets=[]
@@ -176,22 +145,22 @@ class AttackManager:
         # Calculate threat score
         current_enemy_supports = sum([(1 + unit.upgraded) for unit in enemy_defenses["supports"] ])
         prev_enemy_supports=sum([(1 + unit.upgraded) for unit in self.previous_enemy_units["supports"] ])
-        future_supports = ((max(0,(sp_gained_from_removal-enemy_sp_gained_due_to_attack)))//4)**(1.7)
+        future_supports = (max(0,(sp_gained_from_removal-enemy_sp_gained_due_to_attack)//4))**(1.2)
         
-        w1, w2 = 1.4, 3
-        normalizing_factor = 35 * (max(int(game_state.turn_number) - 5, 1)) ** 0.1
-        threat_score = ((w1 * enemy_MP) ** (((current_enemy_supports + future_supports) ** 0.8) / w2 + 0.1)) / normalizing_factor
+        w1, w2,w3 = 1.9, 4, 2
+        normalizing_factor = 50*(max(int(game_state.turn_number) - 5, 1)) ** 0.2 #decrease interceptors as turns increase
+        threat_score = ((w1 * (enemy_MP**(w3))) ** (((current_enemy_supports + future_supports) ** 0.7) / w2 + 0.1)) / normalizing_factor
         
         # Determine attack strategy
         interception_probability = threat_score * cooldown_factor
-        num_interceptors = (1 if  interception_probability >=1/2 else 0) + (1 if interception_probability >=0.8 else 0)
+        num_interceptors = (1 if  interception_probability >=1/2 else 0) + (1 if interception_probability >=0.75 else 0)
         
         min_scouts = 10 if game_state.enemy_health <= 5 else 13
 
         interceptor_threshold = 5     #min enemy mp to send interceptor
-        if enemy_MP >= interceptor_threshold and game_state.turn_number >=3 and my_MP<min_scouts and num_interceptors>=1 and current_enemy_supports>=prev_enemy_supports:
+        if enemy_MP >= interceptor_threshold and game_state.turn_number >=3 and my_MP<=7.5 and num_interceptors>=1 and current_enemy_supports>=prev_enemy_supports:
             if(num_interceptors==2 and enemy_MP>=12):
-                game_state.attempt_spawn(INTERCEPTOR, [5,8], 1)
+                game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, 1)
             game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, 1)
 
             self.last_interceptor_turn = game_state.turn_number
