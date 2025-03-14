@@ -128,7 +128,10 @@ class AttackManager:
         Returns a weighted sum of the damage it incurs and the damage it causes. We want it to  cause maximum 
         damage and incur minimum possible damage
         """
+        weight1,weight2 = 1,1
+        MAX_DAMAGE_TO_INCUR = 200
         damages = []
+        safe=True
         # Get the damage estimate each path will take
         for location in location_options:
             path = game_state.find_path_to_edge(location)
@@ -138,12 +141,13 @@ class AttackManager:
             for path_location in path:
                 # Get number of enemy turrets that can attack each location and multiply by turret damage
                 damage_incurred += len(game_state.get_attackers(path_location, 0)) * gamelib.GameUnit(TURRET, game_state.config).damage_i
+                if damage_incurred >= MAX_DAMAGE_TO_INCUR: safe=False
                 # Get number of enemy supports that are attacked at each location and multiply by scout damage
                 damage_to_supports += len(self.get_supports_attacked_by_scout(game_state,path_location)) * gamelib.GameUnit(SCOUT, game_state.config).damage_i
-            damages.append(damage_to_supports - damage_incurred)
+            damages.append(weight1*damage_to_supports - weight2*damage_incurred)
 
         # Now just return the location that takes the least damage and gives maximum damage to support
-        return location_options[damages.index(min(damages))]
+        return safe,location_options[damages.index(min(damages))]
 
     
     def execute_attack(self, game_state):
