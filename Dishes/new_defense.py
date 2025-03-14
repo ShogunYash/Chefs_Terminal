@@ -14,7 +14,7 @@ class AttackManager:
     def track_enemy_defense_changes(self, game_state):
         # Get current enemy defenses
         enemy_defenses = self.enemy_stationary_units(game_state)
-
+        
         # Count total defenses
         total_walls = len(enemy_defenses["walls"])
         total_turrets = len(enemy_defenses["turrets"])
@@ -233,6 +233,11 @@ class AlgoStrategy(gamelib.AlgoCore):
 
         # Y coordinate of the defense line
         y = 12
+        # Above turret walls
+        turrets_walls = [[3, 13], [6, 13]]
+        # First deployable turrets
+        base_turrets = [[18, 12], [21, 12]]
+
         # Build turrets on the front
         for x in range(3, 27, 3):
             game_state.attempt_spawn(TURRET, [x, y])
@@ -241,17 +246,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         wall_locations = [[0, 13], [27, 13]]
         game_state.attempt_spawn(WALL, wall_locations[self.edge_wall_index])   
         self.edge_wall_index = (self.edge_wall_index + 1) % 2
-
-        # Upgrade and deploy supports one at a time
-        # Support locations 
-        support_locations = [[3, 11], [6, 11], [9, 11], [12, 11]]
-        game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])
-        if game_state.turn_number > 3 and game_state.get_resources(0)[0] >= 10:
-            game_state.attempt_upgrade(support_locations[self.support_index])
-        self.support_index = (self.support_index + 1) % 4
-        attack_bool = self.attack_manager.track_enemy_defense_changes(game_state)["turrets"]["total"] < 5 and game_state.turn_number != 0
-        if game_state.turn_number < 3 and attack_bool:
-            game_state.attempt_spawn(SCOUT, [3, 10], math.floor(game_state.get_resources(0)[1]))
 
         i = 1 
         j = 26
@@ -266,6 +260,13 @@ class AlgoStrategy(gamelib.AlgoCore):
             game_state.attempt_spawn(WALL, [j, y])
             i += 1
             j -= 1
+        # Upgrade and deploy supports one at a time
+        # Support locations 
+        support_locations = [[3, 11], [6, 11], [9, 11], [12, 10]]
+        game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])
+        if game_state.turn_number > 3 and game_state.get_resources(0)[0] >= 10:
+            game_state.attempt_upgrade(support_locations[self.support_index])
+        self.support_index = (self.support_index + 1) % 4
         
         # Check turrets health and remove if less than 30
         for x in range(3, 27, 3):
@@ -313,6 +314,8 @@ class AlgoStrategy(gamelib.AlgoCore):
         #         game_state.attempt_spawn(WALL, [x, y])  
         
         game_state.attempt_spawn(TURRET, [22, 10])
+        # Build walls in front of turrets
+        game_state.attempt_spawn(WALL, turrets_walls)
         
         # Upgrade defenses and Advancing the defense line
         if game_state.turn_number > 4:
@@ -322,6 +325,10 @@ class AlgoStrategy(gamelib.AlgoCore):
                     game_state.attempt_spawn(WALL, [x, 10])
                 else:
                     break
+            # Upgrade turret walls
+            game_state.attempt_upgrade(turrets_walls[self.turrets_index])
+            self.turrets_index = (self.turrets_index + 1) % 2
+
 
 if __name__ == "__main__":
     algo = AlgoStrategy()

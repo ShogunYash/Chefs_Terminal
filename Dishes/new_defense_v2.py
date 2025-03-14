@@ -14,7 +14,7 @@ class AttackManager:
     def track_enemy_defense_changes(self, game_state):
         # Get current enemy defenses
         enemy_defenses = self.enemy_stationary_units(game_state)
-
+        
         # Count total defenses
         total_walls = len(enemy_defenses["walls"])
         total_turrets = len(enemy_defenses["turrets"])
