@@ -4,6 +4,7 @@ import math
 import warnings
 from sys import maxsize
 import json
+import copy
 
 class AttackManager:
     def __init__(self):
