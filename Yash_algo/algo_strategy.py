@@ -318,9 +318,9 @@ class AlgoStrategy(gamelib.AlgoCore):
         if game_state.turn_number > 3 and game_state.get_resources(0)[0] >= 10:
             game_state.attempt_upgrade(support_locations[self.support_index])
         self.support_index = (self.support_index + 1) % 4
-        attack_bool = self.attack_manager.track_enemy_defense_changes(game_state)["turrets"]["total"] < 5 and game_state.turn_number != 0
-        if game_state.turn_number < 3 and attack_bool:
-            game_state.attempt_spawn(SCOUT, [3, 10], math.floor(game_state.get_resources(0)[1]))
+        # attack_bool = self.attack_manager.track_enemy_defense_changes(game_state)["turrets"]["total"] < 5 and game_state.turn_number != 0
+        # if game_state.turn_number < 3 and attack_bool:
+        #     game_state.attempt_spawn(SCOUT, [3, 10], math.floor(game_state.get_resources(0)[1]))
 
         i = 1 
         j = 26
