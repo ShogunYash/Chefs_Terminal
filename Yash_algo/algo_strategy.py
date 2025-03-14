@@ -6,19 +6,25 @@ from sys import maxsize
 import json
 import copy
 
+# Global variable to store current funnel openings
+CURRENT_FUNNEL_OPENINGS = []
+
 class AttackManager:
     def __init__(self):
         self.last_attack_turn = 0
         self.last_interceptor_turn = 0
         self.consecutive_interceptor_uses = 0
+        
+
         self.previous_enemy_units = {"walls": [], "turrets": [], "supports": []}
-        self.previous_enemy_resources = {"MP": 5, "SP": 40,"health":30}
+        self.previousturn_begin_enemy_resources = {"MP": 5, "SP": 40,"health":30}
         self.previous_my_resources={"MP":5 , "SP":40,"health":30 }
         # Add end-of-turn SP tracking
         self.enemy_end_turn_sp = 40  # Default starting SP
         
         # Add turn tracking to avoid redundant processing
         self.last_processed_turn = -1
+        
 
     def enemy_stationary_units(self, game_state):
             walls=[]
@@ -39,16 +45,27 @@ class AttackManager:
             all_units["turrets"]=turrets
             all_units["supports"]=supports
             return all_units
+        
+    def my_stationary_units(self, game_state):
+            walls=[]
+            turrets=[]
+            supports=[]
+            for y in range(0,13): #my half y coordinates
+                for x in range(13-y,15+y):
+                    if(game_state.game_map[x,y]):
+                        unit = game_state.game_map[x,y][0]
+                        if(unit.unit_type=="FF"):
+                            walls.append(unit)
+                        elif(unit.unit_type=="DF"):
+                            turrets.append(unit)
+                        elif(unit.unit_type=="EF"):
+                            supports.append(unit)
+            all_units={}
+            all_units["walls"]=walls
+            all_units["turrets"]=turrets
+            all_units["supports"]=supports
+            return all_units
     
-    def calculate_sp_removed(self,all_units):
-        #for walls
-        walls=all_units["walls"]
-        wall_sp_removed=sum([0.75*(2+wall.upgraded)*(wall.health/(50+70*wall.upgraded)) for wall in walls if wall.pending_removal])
-        turrets=all_units["turrets"]
-        turret_sp_removed=sum([0.75*(3+8*turret.upgraded)*(turret.health/(70+0*turret.upgraded)) for turret in turrets if turret.pending_removal])
-        supports=all_units["supports"]
-        support_sp_removed=sum([0.75*(4+4*support.upgraded)*(support.health/(20+0*support.upgraded)) for support in supports if support.pending_removal])
-        return [wall_sp_removed,turret_sp_removed,support_sp_removed]
     
     def get_supports_attacked_by_scout(self, game_state, location):
         '''
@@ -114,24 +131,49 @@ class AttackManager:
         # Now just return the location that takes the least damage and gives maximum damage to support
         return location_options[damages.index(min(damages))]
 
-    
-    def execute_attack(self, game_state):
-    # Get enemy units and calculate threat
-        enemy_defenses = self.enemy_stationary_units(game_state)
-        enemy_MP = game_state.get_resources(1)[1]
-        enemy_SP = game_state.get_resources(1)[0]
-        my_MP = game_state.get_resources(0)[1]
-        my_SP=game_state.get_resources(0)[0]
-        my_health=game_state.my_health
-        interceptor_spawn_location=[21,7]
+ 
+    def update_funnel_openings(self, game_state):
+        """
+        Analyzes the current game state to identify and update funnel openings.
+        This should be called after all defenses are placed for a turn.
         
+        Args:
+            game_state: Current game state to analyze
+        """
+        global CURRENT_FUNNEL_OPENINGS
+        CURRENT_FUNNEL_OPENINGS = []
+        defense_line_y = 12  # The y-coordinate of your main defensive line
+        
+        # Check each position along the defensive line
+        for x in range(1, 27):
+            # If there's no unit at this position, it's an opening
+            if not game_state.contains_stationary_unit([x, defense_line_y]):
+                CURRENT_FUNNEL_OPENINGS.append([x, defense_line_y])
+        
+        if not game_state.contains_stationary_unit([0,13]):
+                CURRENT_FUNNEL_OPENINGS.append([0,13])
+        if not game_state.contains_stationary_unit([27,13]):
+                CURRENT_FUNNEL_OPENINGS.append([27,13])
+        
+        
+        gamelib.debug_write(f"Updated funnel openings: {CURRENT_FUNNEL_OPENINGS}")
+
+    def execute_attack(self, game_state):
+        self.enemy_defenses = self.enemy_stationary_units(game_state)
+        self.enemy_MP = game_state.get_resources(1)[1]
+        self.enemy_SP = game_state.get_resources(1)[0]
+        self.my_MP = game_state.get_resources(0)[1]
+        self.my_SP=game_state.get_resources(0)[0]
+        self.my_health=game_state.my_health
+    # Get enemy units and calculate threat
+        interceptor_spawn_location=[21,7]
         # Calculate SP from last turn
         prev_turn_end_enemy_SP = self.enemy_end_turn_sp
         # Each turn players gain 5 SP
-        sp_gained_from_removal = max(0, enemy_SP - prev_turn_end_enemy_SP - 5)
+        sp_gained_from_removal = max(0, self.enemy_SP - prev_turn_end_enemy_SP - 5)
         
         gamelib.debug_write(f"Enemy SP at end of last turn: {prev_turn_end_enemy_SP}")
-        gamelib.debug_write(f"Current enemy SP: {enemy_SP}")
+        gamelib.debug_write(f"Current enemy SP: {self.enemy_SP}")
         gamelib.debug_write(f"SP gained from removal: {sp_gained_from_removal}")
 
         # Calculate interceptor probability
@@ -141,41 +183,46 @@ class AttackManager:
 
         self.consecutive_interceptor_uses = 0 if turns_since_interceptor > 1 else self.consecutive_interceptor_uses
 
-        enemy_sp_gained_due_to_attack=self.previous_my_resources["health"]-my_health
-        # Calculate threat score
-        current_enemy_supports = sum([(1 + unit.upgraded) for unit in enemy_defenses["supports"] ])
-        prev_enemy_supports=sum([(1 + unit.upgraded) for unit in self.previous_enemy_units["supports"] ])
+        enemy_sp_gained_due_to_attack=self.previous_my_resources["health"]-self.my_health
         future_supports = (max(0,(sp_gained_from_removal-enemy_sp_gained_due_to_attack)//4))**(1.2)
+
+        current_enemy_supports = sum([(1 + unit.upgraded) for unit in self.enemy_defenses["supports"] ])
+        prev_enemy_supports=sum([(1 + unit.upgraded) for unit in self.previous_enemy_units["supports"] ])
+        #calculate threat score
+        w1, w2,w3 = 1.9, 4, 2.6
+        normalizing_factor = 22*((max(int(game_state.turn_number) - 4, 1)) ** 0.35)*(self.my_MP)**(0.3) #decrease interceptors as turns increase
+        threat_score = ((w1 * (self.enemy_MP**(w3))) ** (((current_enemy_supports + future_supports) ** 0.6) / w2 +0.1)) / normalizing_factor
         
-        w1, w2,w3 = 1.9, 4, 2
-        normalizing_factor = 50*(max(int(game_state.turn_number) - 5, 1)) ** 0.2 #decrease interceptors as turns increase
-        threat_score = ((w1 * (enemy_MP**(w3))) ** (((current_enemy_supports + future_supports) ** 0.7) / w2 + 0.1)) / normalizing_factor
         
         # Determine attack strategy
         interception_probability = threat_score * cooldown_factor
-        num_interceptors = (1 if  interception_probability >=1/2 else 0) + (1 if interception_probability >=0.75 else 0)
+        global CURRENT_FUNNEL_OPENINGS
+        self.update_funnel_openings(game_state)
+        
+        for opening in CURRENT_FUNNEL_OPENINGS:
+            if(opening[0]<16):
+                interception_probability=0
+                break
+
+        num_interceptors = (1 if  interception_probability >=1/2 else 0) 
         
         min_scouts = 10 if game_state.enemy_health <= 5 else 13
+        min_scouts-=len(self.my_stationary_units(game_state)["supports"])
 
-        interceptor_threshold = 5     #min enemy mp to send interceptor
-        if enemy_MP >= interceptor_threshold and game_state.turn_number >=3 and my_MP<=7.5 and num_interceptors>=1 and current_enemy_supports>=prev_enemy_supports:
-            if(num_interceptors==2 and enemy_MP>=12):
-                game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, 1)
-            game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, 1)
 
+        interceptor_threshold = 5 if 5>=game_state.turn_number>=3 else 7  #min enemy mp to send interceptor
+        if (self.enemy_MP >= interceptor_threshold and game_state.turn_number >=2 and self.my_MP<=min_scouts and current_enemy_supports>=prev_enemy_supports):
+            game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, num_interceptors)
             self.last_interceptor_turn = game_state.turn_number
             self.consecutive_interceptor_uses += 1
         
-        if my_MP >= min_scouts:
-            game_state.attempt_spawn(SCOUT, [4, 9], math.floor(my_MP))
+        if self.my_MP >= min_scouts or game_state.turn_number==1:
+            game_state.attempt_spawn(SCOUT, [4, 9], math.floor(self.my_MP))
             self.last_attack_turn = game_state.turn_number
             
-        gamelib.debug_write(f"PREVIOUS enemy units: Walls: {len(self.previous_enemy_units['walls'])}, Turrets: {len(self.previous_enemy_units['turrets'])}, Supports: {len(self.previous_enemy_units['supports'])}")
-        gamelib.debug_write(f"CURRENT enemy units: Walls: {len(enemy_defenses['walls'])}, Turrets: {len(enemy_defenses['turrets'])}, Supports: {len(enemy_defenses['supports'])}")
-        gamelib.debug_write(f"prev_enemy_supports: {prev_enemy_supports}, current_enemy_supports: {current_enemy_supports}")
-
+        
         # Store only resources for next turn (not enemy units - those will be updated in on_action_frame)
-        self.previous_my_resources={"MP":my_MP , "SP":my_SP,"health":my_health }
+        self.previous_my_resources={"MP":self.my_MP , "SP":self.my_SP,"health":self.my_health }
 
         return True
 
@@ -192,6 +239,14 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.edge_wall_index = 0
         self.turret_index = 3
         self.turrets_list = [3, 6, 9, 12, 18, 21, 24]
+        # Initialize empty funnel openings list
+        global CURRENT_FUNNEL_OPENINGS
+        CURRENT_FUNNEL_OPENINGS = []
+
+    
+
+        
+        
 
     def on_game_start(self, config):
         """ 
@@ -210,6 +265,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         SP = 0
         # This is a good place to do initial setup
         self.scored_on_locations = []
+        self.last_support_turn=0
 
     def on_turn(self, turn_state):
         """
@@ -237,6 +293,8 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.build_defences(game_state)
         # Use our new attack manager to execute attacks
         attack_executed = self.attack_manager.execute_attack(game_state)
+
+    
 
     def build_defences(self, game_state):
         """
@@ -274,53 +332,68 @@ class AlgoStrategy(gamelib.AlgoCore):
                 if x % 3 != 0 and [x, y] and not (22<=x<=23) :
                     game_state.attempt_spawn(WALL, [x, y])
 
+        sp_needed_to_replace_removed=0
+        # Check walls and turrets health and remove if less than equal to threshold
+        for x in range(1,26):
+            if(game_state.game_map[x,y] and  game_state.turn_number >= 3):
+                unit = game_state.game_map[x,y][0]
+                if  (unit.unit_type == "FF" and unit.health <= 28+20*unit.upgraded):
+                    if(game_state.attempt_upgrade([x, y])):
+                        continue
+                    else:  
+                        game_state.attempt_remove([x, y])
+                        sp_needed_to_replace_removed+=2*(1-(0.75)*(unit.health/(50+70*unit.upgraded)))
+                    
+                elif (unit.unit_type == "DF" and unit.health <=34):
+
+                    game_state.attempt_remove([x, y])
+                    sp_needed_to_replace_removed+=3*(1-(0.75)*(unit.health/70))
         # Upgrade and deploy supports one at a time
         # Support locations 
-        support_locations = [[2, 11], [6, 11], [9, 11], [12, 11]]
+        support_locations = [[2, 11], [6, 11], [3, 11], ]
         if game_state.turn_number == 0:
             game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])
-            self.support_index = (self.support_index + 1) % 4  
+            self.support_index = (self.support_index + 1) % len(support_locations) 
         
         # Add wall for protecting left most turret and if possible upgrade it
-        if(game_state.game_map[6,y]):
+        if(game_state.game_map[6,y] and sp_needed_to_replace_removed<=7):
             unit = game_state.game_map[6,y][0]
             if unit.unit_type == "DF" :
                 game_state.attempt_upgrade([6, y+1])
                 game_state.attempt_spawn(WALL,[6, y+1])
                         
-        # Build turrets on the front
-        game_state.attempt_spawn(TURRET, [22, 10])
+        # Build turrets on the back
+        game_state.attempt_spawn(TURRET, [23, 10]) if sp_needed_to_replace_removed<=7 else None
 
-        if game_state.turn_number > 3 :
-            if game_state.attempt_upgrade(support_locations) > 0:
-                self.support_index = 3
-            else:
-                game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])
-                self.support_index = (self.support_index + 1) % 4  
-
+        #support spawning algo
+        if game_state.turn_number > 3 and game_state.turn_number-self.last_support_turn>1 and sp_needed_to_replace_removed<=6:
+            game_state.attempt_upgrade(support_locations)
+            if(game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])):
+                self.support_index = (self.support_index + 1) % len(support_locations)
+            
+            
         # Attempt create walls to protect upgraded turrets
         for x in range(6, 27, 3):
-            if(game_state.game_map[x,y]):
+            if(game_state.game_map[x,y] and sp_needed_to_replace_removed<=7):
                 unit = game_state.game_map[x,y][0]
-                if unit.unit_type == "DF" and unit.health > 35 and game_state.get_resources(0)[0] >= 10:
+                if unit.unit_type == "DF" and unit.health >=40 and game_state.get_resources(0)[0] >= 10:
                     game_state.attempt_upgrade([x, y])
                     game_state.attempt_spawn(WALL,[x, y+1])
 
-        # Attempt Upgrade walls protecting turrets
-        for x in range(1, 26, 1):
-            game_state.attempt_upgrade([x, y+1])
+        
+        
 
-        # Check turrets health and remove if less than 30
-        for x in range(3, 27, 3):
-            if(game_state.game_map[x,y]):
-                unit = game_state.game_map[x,y][0]
-                if game_state.turn_number >= 3:
-                    if unit.unit_type == "DF" and unit.health < 30:
-                            game_state.attempt_remove([x, y])
-                    elif unit.unit_type == "FF" and unit.health < 25:
-                        game_state.attempt_remove([x, y])
-                    elif unit.unit_type == "FF" and unit.health >= 40:
-                        game_state.attempt_upgrade([x, y])
+        # First Attempt Upgrade walls protecting turrets
+        for x in range(1, 26, 1):
+            if(game_state.game_map[x,y] and game_state.turn_number>=3 and sp_needed_to_replace_removed<=6):
+                game_state.attempt_upgrade([x, y+1])
+        #now try to upgrade some of the normal walls            
+        # for x in range(4,23,2):
+        #     if(game_state.game_map[x,y] and game_state.turn_number>=4 and sp_needed_to_replace_removed<=6):
+        #         unit = game_state.game_map[x,y][0]   
+        #         if unit.unit_type=="FF" and unit.health >=35 :
+        #             game_state.attempt_upgrade([x, y])             
+
 
     def on_action_frame(self, turn_string):
         state = json.loads(turn_string)
