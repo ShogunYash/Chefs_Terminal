@@ -7,9 +7,17 @@ import json
 
 class AttackManager:
     def __init__(self):
-        self.last_attack_turn = 0  # Track when we last attacked
-        self.last_interceptor_turn = 0  # Track when we last used interceptors
-        self.consecutive_interceptor_uses = 0  # Track consecutive uses
+        self.last_attack_turn = 0
+        self.last_interceptor_turn = 0
+        self.consecutive_interceptor_uses = 0
+        self.previous_enemy_units = {"walls": [], "turrets": [], "supports": []}
+        self.previous_enemy_resources = {"MP": 5, "SP": 40,"health":30}
+        self.previous_my_resources={"MP":5 , "SP":40,"health":30 }
+        # Add end-of-turn SP tracking
+        self.enemy_end_turn_sp = 40  # Default starting SP
+        
+        # Add turn tracking to avoid redundant processing
+        self.last_processed_turn = -1
 
     def track_enemy_defense_changes(self, game_state):
         # Get current enemy defenses
@@ -138,101 +146,68 @@ class AttackManager:
 
     
     def execute_attack(self, game_state):
-        """
-        Executes the attack strategy:   
-        - If we have 13+ MP, send 13 scouts from the best location
-        - Otherwise, send a single interceptor as a distraction
-        """
-
-        enemy_MP = game_state.get_resources(1)[1]
-        my_MP = game_state.get_resources(0)[1]
-        scout_spawn_location = [4, 9]
-        attack_interceptor = False
-        min_scouts = 13
-
-        # Add this at the beginning of execute_attack
-        # defense_stats = self.track_enemy_defense_changes(game_state)
-
-        # if defense_stats["total"] == defense_stats["supports"]["total"] and defense_stats["supports"]["removed"] == 0 and game_state.turn_number > 1:
-        #     game_state.attempt_spawn(SCOUT, scout_spawn_location, math.floor(my_MP))
-        #     return True
-            
-        # if defense_stats["removed"] > 4 and defense_stats["supports"]["removed"] == 0 :
-        #     attack_interceptor = True
-        
-        # if attack_interceptor:
-        #     game_state.attempt_spawn(INTERCEPTOR, [21, 7], 1)
-        #     self.last_interceptor_turn = game_state.turn_number
-        #     game_state.attempt_spawn(SCOUT, scout_spawn_location, math.floor(my_MP))
-        #     return True
-
-        # else:
-        # Calculate time since last interceptor usage
-        turns_since_interceptor = game_state.turn_number - self.last_interceptor_turn
-        
-        if turns_since_interceptor >1:
-            self.consecutive_interceptor_uses = 0
-            interceptor_cooldown_factor = 1.0  # Full probability
-        else:
-            # Apply the specific decay pattern: 1 -> 3/5 -> 2/5
-            if self.consecutive_interceptor_uses == 0:
-                interceptor_cooldown_factor = 1.0
-            elif self.consecutive_interceptor_uses == 1:
-                interceptor_cooldown_factor = 0.6
-            else:
-                interceptor_cooldown_factor = 0.4
-        
-        interceptor_spawn_location = [21, 7]
+    # Get enemy units and calculate threat
         enemy_defenses = self.enemy_stationary_units(game_state)
-        w1=1.3
-        w2=3
-        normalizing_factor=50*(max(int(game_state.turn_number)-5 , 1))**(0.2)
-        def calculate_threat_score():
-            current_enemy_supports=0
-            for unit in enemy_defenses["supports"]:
-                if not unit.pending_removal:
-                    current_enemy_supports+=1+unit.upgraded
-                    
-            gamelib.debug_write("\n current_enemy_supports-",current_enemy_supports ,"\n")
+        enemy_MP = game_state.get_resources(1)[1]
+        enemy_SP = game_state.get_resources(1)[0]
+        my_MP = game_state.get_resources(0)[1]
+        my_SP=game_state.get_resources(0)[0]
+        my_health=game_state.my_health
+        interceptor_spawn_location=[21,7]
+        
+        # Calculate SP from last turn
+        prev_turn_end_enemy_SP = self.enemy_end_turn_sp
+        # Each turn players gain 5 SP
+        sp_gained_from_removal = max(0, enemy_SP - prev_turn_end_enemy_SP - 5)
+        
+        gamelib.debug_write(f"Enemy SP at end of last turn: {prev_turn_end_enemy_SP}")
+        gamelib.debug_write(f"Current enemy SP: {enemy_SP}")
+        gamelib.debug_write(f"SP gained from removal: {sp_gained_from_removal}")
 
-            #counts supports in enemy base which are not pending removal
-            #now add sp gained from removing turrets and walls(ignore supports as if someone removed support they wouldnt attack next)
-            future_additional_enemy_supports=(self.calculate_sp_removed(enemy_defenses)[0]+self.calculate_sp_removed(enemy_defenses)[1])//4
-            gamelib.debug_write("\n future_enemy_supports-",future_additional_enemy_supports, "\n")
-            p = (w1*enemy_MP)**(((current_enemy_supports+future_additional_enemy_supports)**0.9)/w2 + 0.2)
-            return min(0.9, p/ normalizing_factor)
+        # Calculate interceptor probability
+        turns_since_interceptor = game_state.turn_number - self.last_interceptor_turn
 
-        interception_probability = calculate_threat_score() * interceptor_cooldown_factor
-        num=random.random()
-        num_interceptors=0
-        if num<=interception_probability:
-            num_interceptors+=1
-        if num <= interception_probability*0.4:
-            num_interceptors+=1
+        cooldown_factor = 1.0 if turns_since_interceptor > 1 else [1.0, 0.6, 0.4][min(self.consecutive_interceptor_uses, 2)]
 
-        gamelib.debug_write("\n num-",num)
-        gamelib.debug_write("\n p-",interception_probability)
-        gamelib.debug_write("\n no. of interceptors -",num_interceptors)
+        self.consecutive_interceptor_uses = 0 if turns_since_interceptor > 1 else self.consecutive_interceptor_uses
 
-        if game_state.enemy_health <= 5:
-            min_scouts = 10
+        enemy_sp_gained_due_to_attack=self.previous_my_resources["health"]-my_health
+        # Calculate threat score
+        current_enemy_supports = sum([(1 + unit.upgraded) for unit in enemy_defenses["supports"] ])
+        prev_enemy_supports=sum([(1 + unit.upgraded) for unit in self.previous_enemy_units["supports"] ])
+        future_supports = ((sp_gained_from_removal-enemy_sp_gained_due_to_attack)//4)**(1.7)
+        
+        w1, w2 = 1.4, 3
+        normalizing_factor = 35 * (max(int(game_state.turn_number) - 5, 1)) ** 0.1
+        threat_score = ((w1 * enemy_MP) ** (((current_enemy_supports + future_supports) ** 0.8) / w2 + 0.1)) / normalizing_factor
+        
+        # Determine attack strategy
+        interception_probability = threat_score * cooldown_factor
+        num_interceptors = (1 if  interception_probability >=1/2 else 0) + (1 if interception_probability >=0.8 else 0)
+        
+        min_scouts = 10 if game_state.enemy_health <= 5 else 13
 
         interceptor_threshold = 5     #min enemy mp to send interceptor
-        if enemy_MP >= interceptor_threshold and game_state.turn_number >=3 and my_MP<min_scouts and num_interceptors>=1:
+        if enemy_MP >= interceptor_threshold and game_state.turn_number >=3 and my_MP<min_scouts and num_interceptors>=1 and current_enemy_supports>=prev_enemy_supports:
             if(num_interceptors==2 and enemy_MP>=12):
                 game_state.attempt_spawn(INTERCEPTOR, [5,8], 1)
             game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, 1)
 
             self.last_interceptor_turn = game_state.turn_number
             self.consecutive_interceptor_uses += 1
-    
-        # Launch many scouts at once for a coordinated attack is min_scouts
-        #future note- improve scout sending strategy 
-
+        
         if my_MP >= min_scouts:
-            game_state.attempt_spawn(SCOUT, scout_spawn_location, math.floor(my_MP))
+            game_state.attempt_spawn(SCOUT, [4, 9], math.floor(my_MP))
             self.last_attack_turn = game_state.turn_number
-        return True  
+            
+        gamelib.debug_write(f"PREVIOUS enemy units: Walls: {len(self.previous_enemy_units['walls'])}, Turrets: {len(self.previous_enemy_units['turrets'])}, Supports: {len(self.previous_enemy_units['supports'])}")
+        gamelib.debug_write(f"CURRENT enemy units: Walls: {len(enemy_defenses['walls'])}, Turrets: {len(enemy_defenses['turrets'])}, Supports: {len(enemy_defenses['supports'])}")
+        gamelib.debug_write(f"prev_enemy_supports: {prev_enemy_supports}, current_enemy_supports: {current_enemy_supports}")
+
+        # Store only resources for next turn (not enemy units - those will be updated in on_action_frame)
+        self.previous_my_resources={"MP":my_MP , "SP":my_SP,"health":my_health }
+
+        return True
 
 class AlgoStrategy(gamelib.AlgoCore):
     def __init__(self):
@@ -263,6 +238,8 @@ class AlgoStrategy(gamelib.AlgoCore):
         INTERCEPTOR = config["unitInformation"][5]["shorthand"]
         MP = 1
         SP = 0
+        # This is a good place to do initial setup
+        self.scored_on_locations = []
 
     def on_turn(self, turn_state):
         """
@@ -442,6 +419,43 @@ class AlgoStrategy(gamelib.AlgoCore):
                     game_state.attempt_spawn(WALL, [x, 10])
                 else:
                     break
+    def on_action_frame(self, turn_string):
+        state = json.loads(turn_string)
+        
+        # Get current turn number
+        current_turn = state["turnInfo"][1] if "turnInfo" in state else -1
+        
+        # Only process p2Stats once per turn - this effectively identifies the last frame
+        if "p2Stats" in state and current_turn != self.attack_manager.last_processed_turn:
+            p2_stats = state["p2Stats"]
+            self.attack_manager.enemy_end_turn_sp = p2_stats[1]  # SP at index 1
+            gamelib.debug_write(f"p2Stats {p2_stats}")
+            
+            # Create a game state from the current state to get end-of-turn data
+            game_state = gamelib.GameState(self.config, json.dumps(state))
+            
+            # Call enemy_stationary_units to get the enemy units at the end of turn
+            end_turn_enemy_units = self.attack_manager.enemy_stationary_units(game_state)
+            
+            # Update previous_enemy_units with end-of-turn state
+            self.attack_manager.previous_enemy_units = copy.deepcopy(end_turn_enemy_units)
+            
+            # Update the last processed turn to avoid redundancy
+            self.attack_manager.last_processed_turn = current_turn
+            gamelib.debug_write(f"Updated enemy SP to {self.attack_manager.enemy_end_turn_sp} for turn {current_turn}")
+            gamelib.debug_write(f"Updated previous_enemy_units with end-of-turn data for turn {current_turn}")
+
+        # Process breaches
+        events = state.get("events", {})
+        breaches = events.get("breach", [])
+        for breach in breaches:
+            location = breach[0]
+            unit_owner_self = True if breach[4] == 1 else False
+            if not unit_owner_self:
+                # Only log each breach once by checking if it's already in the list
+                if location not in self.scored_on_locations:
+                    gamelib.debug_write("Got scored on at: {}".format(location))
+                    self.scored_on_locations.append(location)
 
 if __name__ == "__main__":
     algo = AlgoStrategy()
