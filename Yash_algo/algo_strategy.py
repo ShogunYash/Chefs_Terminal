@@ -1,4 +1,3 @@
-
 import gamelib
 import random
 import math
@@ -41,7 +40,70 @@ class AttackManager:
         supports=all_units["supports"]
         support_sp_removed=sum([0.75*(4+4*support.upgraded)*(support.health/(20+0*support.upgraded)) for support in supports if support.pending_removal])
         return [wall_sp_removed,turret_sp_removed,support_sp_removed]
+    
+    def get_supports_attacked_by_scout(self, game_state, location):
+        '''
+        returns the locations of the support within scout range at given location
+        '''
+        if not game_state.game_map.in_arena_bounds(location):
+            self.warn("Location {} is not in the arena bounds.".format(location))
+        supports_attacked = []
+        '''
+        Get the locations in range of the scout units that are also supports
+        '''
+        possible_locations = game_state.game_map.get_locations_in_range(location, gamelib.GameUnit(SCOUT, game_state.config).attackRange)
+        for point in possible_locations:
+            if game_state.game_map[point][0].unit_type == SUPPORT:
+                supports_attacked.append(point)
+        return supports_attacked
+    
+    def get_supports_boosting_scout(self, game_state, path):
+        '''
+        Returns the number of scouts that shield the scouts along a given path
+        We just want the number of supports in the range of the scout path 
+        '''
+        supports_on_map = []
+        for y in range(14,28): #enemy half y coordinates
+                for x in range(y-14,42-y):
+                    if(game_state.game_map[x,y]):
+                        unit = game_state.game_map[x,y][0]
+                        if(unit.unit_type=="EF"):
+                            supports_on_map.append(unit)
+        supports_boosting = set()
+        for path_location in path:
+            for support in supports_on_map:
+                if game_state.game_map.distance_between_locations(path_location, support.location) <= support.shieldRange:
+                    supports_boosting.add(support)
+        boost=0
+        for support in supports_boosting:
+            boost += support.shieldPerUnit
+        return boost
 
+
+    def scout_attack_scorer(self, game_state, location_options):
+        """
+        This function will help us guess which location is the safest to spawn moving units from.
+        It gets the path the unit will take then checks locations on that path to 
+        estimate the path's damage risk.
+        Returns a weighted sum of the damage it incurs and the damage it causes. We want it to  cause maximum 
+        damage and incur minimum possible damage
+        """
+        damages = []
+        # Get the damage estimate each path will take
+        for location in location_options:
+            path = game_state.find_path_to_edge(location)
+            # Get number of supports helping the scouts over the path and add the boost we get from them
+            damage_incurred = -self.get_supports_boosting_scout(game_state, path)
+            damage_to_supports = 0
+            for path_location in path:
+                # Get number of enemy turrets that can attack each location and multiply by turret damage
+                damage_incurred += len(game_state.get_attackers(path_location, 0)) * gamelib.GameUnit(TURRET, game_state.config).damage_i
+                # Get number of enemy supports that are attacked at each location and multiply by scout damage
+                damage_to_supports += len(self.get_supports_attacked_by_scout(game_state,path_location)) * gamelib.GameUnit(SCOUT, game_state.config).damage_i
+            damages.append(damage_to_supports - damage_incurred)
+
+        # Now just return the location that takes the least damage and gives maximum damage to support
+        return location_options[damages.index(min(damages))]
 
     
     def execute_attack(self, game_state):
