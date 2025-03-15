@@ -9,7 +9,7 @@ import copy
 # Global variable to store current funnel openings
 CURRENT_FUNNEL_OPENINGS = []
 BEST_SCOUT_SPAWN_LOCATION=None
-BEST_DEFENSE_SCORE=float(0)
+BEST_DEFENSE_SCORE=0
 
 class AttackManager:
     def __init__(self):
@@ -109,40 +109,59 @@ class AttackManager:
 
     def update_defense_score(self, game_state, location_options):
         """
-        This function will help us guess which location is the safest to spawn moving units from.
-        It gets the path the unit will take then checks locations on that path to 
-        estimate the path's damage risk.
-        Returns a weighted sum of the damage it incurs and the damage it causes. We want it to  cause maximum 
-        damage and incur minimum possible damage
+        This function helps us find the safest location to spawn moving units from.
+        It analyzes each potential path for damage risk and potential damage to enemy supports.
+        Only considers locations where the path exists and damage incurred is below our threshold.
         """
-        defense_scores_per_coordinate = []
-        w1,w2=-1,1
-        safe=True
-        DAMAGE_THRESHOLD = 150 # '''CHECK THIS AGAIN'''
-        # Get the damage estimate each path will take
+        score_location_pairs = []
+        w1, w2 = -1, 1
+        # DAMAGE_THRESHOLD = ((self.my_MP)//2)*15
+        DAMAGE_THRESHOLD = 200
+
+        
+        # Evaluate each possible spawn location
         for location in location_options:
             path = game_state.find_path_to_edge(location)
-            # Get number of supports helping the scouts over the path and add the boost we get from them
-            damage_incurred = 0
-            damage_to_supports = 0
+            
+            # Only process locations that have a valid path
             if path: 
                 damage_incurred = -self.get_supports_boosting_scout(game_state, path)
+                damage_to_supports = 0
+                path_is_safe = True
+                
+                # Calculate damage along the path
                 for path_location in path:
-                    # Get number of enemy turrets that can attack each location and multiply by turret damage
+                    # Get number of enemy turrets that can attack and calculate damage
                     damage_incurred += len(game_state.get_attackers(path_location, 0)) * gamelib.GameUnit(TURRET, game_state.config).damage_i
-                    if damage_incurred >= DAMAGE_THRESHOLD: safe=False
-                    else: safe=True
-                    # Get number of enemy supports that are attacked at each location and multiply by scout damage
-                    damage_to_supports += len(self.get_supports_attacked_by_scout(game_state,path_location)) * gamelib.GameUnit(SCOUT, game_state.config).damage_i
-                defense_scores_per_coordinate.append([float('inf'), w1*damage_to_supports + w2*damage_incurred][safe])
-            else: defense_scores_per_coordinate.append(float('inf'))
-
-        # Now just return the  and score that takes the least damage and gives maximum damage to support
-        global BEST_SCOUT_SPAWN_LOCATION
-        BEST_SCOUT_SPAWN_LOCATION = location_options[defense_scores_per_coordinate.index(min(defense_scores_per_coordinate))]
-        global BEST_DEFENSE_SCORE
-        BEST_DEFENSE_SCORE = min(defense_scores_per_coordinate)
+                    
+                    # Check if damage exceeds our threshold
+                    if damage_incurred >= DAMAGE_THRESHOLD:
+                        path_is_safe = False
+                        break
+                    
+                    # Calculate potential damage to enemy supports
+                    damage_to_supports += len(self.get_supports_attacked_by_scout(game_state, path_location)) * gamelib.GameUnit(SCOUT, game_state.config).damage_i
+                
+                # Only add to our list if the path is safe
+                if path_is_safe:
+                    defense_score = w1 * damage_to_supports + w2 * damage_incurred
+                    score_location_pairs.append((defense_score, location))
+        
+        # Update global variables with the best score and location
+        global BEST_SCOUT_SPAWN_LOCATION, BEST_DEFENSE_SCORE
+        
+        if score_location_pairs:
+            # Sort by score (lower is better since we want to minimize damage taken)
+            score_location_pairs.sort()
+            BEST_DEFENSE_SCORE = score_location_pairs[0][0]
+            BEST_SCOUT_SPAWN_LOCATION = score_location_pairs[0][1]
+        else:
+            # Handle the case where no valid paths are found
+            BEST_DEFENSE_SCORE = 0
+            BEST_SCOUT_SPAWN_LOCATION = None
+        
         return
+
 
  
     def update_funnel_openings(self, game_state):
@@ -233,7 +252,7 @@ class AttackManager:
         self.update_defense_score(game_state, game_state.game_map.get_edge_locations(2)+game_state.game_map.get_edge_locations(3))
         best_spawn_location = BEST_SCOUT_SPAWN_LOCATION
         best_defense_score = BEST_DEFENSE_SCORE  
-        scout_normalising_factor = 10.0
+        scout_normalising_factor = 10
         num_scouts = (int(best_defense_score//scout_normalising_factor))
         # if num_scouts<=4:
         #     num_scouts=0
