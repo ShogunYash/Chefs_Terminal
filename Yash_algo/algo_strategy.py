@@ -115,9 +115,11 @@ class AttackManager:
         """
         score_location_pairs = []
         w1, w2 = -0.9, 1.1
-        w2=w2/((max(1,self.my_MP))**(0.13))
-        w1=w1*(max(1,self.my_MP))**(0.08)
-        DAMAGE_THRESHOLD = (int(self.my_MP//1))*7.4
+        no_of_scouts=(int(self.my_MP//1))
+        w2=w2/(no_of_scouts)**(0.2)
+        w1=w1*(no_of_scouts)**(0.09)
+        
+        DAMAGE_THRESHOLD = (no_of_scouts)*8.5
         
         
         # Evaluate each possible spawn location
@@ -126,7 +128,7 @@ class AttackManager:
             
             # Only process locations that have a valid path
             if path: 
-                damage_incurred = -self.get_supports_boosting_scout(game_state, path)
+                damage_incurred = -self.get_supports_boosting_scout(game_state, path)*(no_of_scouts)*(0.75)#supports are overrated by the algo 
                 damage_to_supports = 0
                 path_is_safe = True
                 
@@ -141,7 +143,7 @@ class AttackManager:
                         break
                     
                     # Calculate potential damage to enemy supports
-                    damage_to_supports += len(self.get_supports_attacked_by_scout(game_state, path_location)) * gamelib.GameUnit(SCOUT, game_state.config).damage_i
+                    damage_to_supports += min(no_of_scouts*0.7,len(self.get_supports_attacked_by_scout(game_state, path_location))) * gamelib.GameUnit(SCOUT, game_state.config).damage_i
                 
                 # Only add to our list if the path is safe
                 if path_is_safe:
@@ -198,8 +200,8 @@ class AttackManager:
         self.my_MP = game_state.get_resources(0)[1]
         self.my_SP=game_state.get_resources(0)[0]
         self.my_health=game_state.my_health
-    # Get enemy units and calculate threat
-        interceptor_spawn_location=[21,7]
+        # Get enemy units and calculate threat
+        interceptor_spawn_location=[21,7] if game_state.contains_stationary_unit([19,12]) else [25,11]
         # Calculate SP from last turn
         prev_turn_end_enemy_SP = self.enemy_end_turn_sp
         # Each turn players gain 5 SP
@@ -223,7 +225,7 @@ class AttackManager:
         prev_enemy_supports=sum([(1 + unit.upgraded) for unit in self.previous_enemy_units["supports"] ])
         current_my_supports = sum((1 + unit.upgraded) for unit in self.my_stationary_units(game_state)["supports"]) 
         #calculate threat score
-        w1, w2,w3,w4 = 1.9, 4.6, 2.5,0.53
+        w1, w2,w3,w4 = 1.9, 4.6, 2.5, 0.53
         n1,n2,n3=21,0.55,0.25
         normalizing_factor = n1*max(1,current_my_supports**(n2))*((self.my_MP)**(n3)) #decrease interceptors as turns increase
         threat_score = (w1 * (max(0,self.enemy_MP-1)**(w3))**(((current_enemy_supports + future_supports) ** w4) / w2 +0.1)) / normalizing_factor
@@ -235,38 +237,41 @@ class AttackManager:
         self.update_funnel_openings(game_state)
         
         for opening in CURRENT_FUNNEL_OPENINGS:
-            if(opening[0]<=17 or opening[0]>=24):
+            if(opening[0]<=18 or opening[0]>=24):
                 interception_probability=0
                 break
-
-        num_interceptors = (1 if  interception_probability >=1/2 else 0) 
         
+        interceptor_threshold = 5   #min enemy mp to send interceptor
         min_scouts = 10 if game_state.enemy_health <= 5 else 13
         min_scouts-=len(self.my_stationary_units(game_state)["supports"])
-
-
-        interceptor_threshold = 5   #min enemy mp to send interceptor
         if (self.enemy_MP >= interceptor_threshold and game_state.turn_number >=2 and self.my_MP<min_scouts and current_enemy_supports>=prev_enemy_supports):
-            game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, num_interceptors)
-            self.last_interceptor_turn = game_state.turn_number
-            self.consecutive_interceptor_uses += 1
+            interception_probability=0
+        # game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, num_interceptors)
+        #     self.last_interceptor_turn = game_state.turn_number
+        #     self.consecutive_interceptor_uses += 1
+        
+        
+            
         
         '''SCOUT LOGIC'''
         self.update_defense_score(game_state, game_state.game_map.get_edge_locations(2)+game_state.game_map.get_edge_locations(3))
         best_spawn_location = BEST_SCOUT_SPAWN_LOCATION
         best_defense_score = BEST_DEFENSE_SCORE  
-        scout_normalising_factor = 11
-        num_scouts = (int(15-(best_defense_score)//scout_normalising_factor)) if not self.last_interceptor_turn==game_state.turn_number else 0
-        if num_scouts<=4:
-            num_scouts=0
-        else:
-            num_scouts=int((self.my_MP)//1)
-        
-        if(self.my_MP>=15):#force attack at mp>=15
-            num_scouts=int((self.my_MP)//1)
-        
-        if game_state.attempt_spawn(SCOUT, best_spawn_location, min(int(self.my_MP//1),num_scouts) ):
+        enemy_remaining_health=30-game_state.enemy_health
+        scout_normalising_factor = 15/((enemy_remaining_health+1)/2)*0.04
+       
+        scout_sending_factor =1 - (best_defense_score/scout_normalising_factor)
+
+        #deciding between scout vs interceptor
+        if(scout_sending_factor<1/2 and interception_probability<1/2 or game_state.turn_number==0):
+            pass   #do nothing
+        elif(scout_sending_factor>=interception_probability and self.my_MP>=5):
+            game_state.attempt_spawn(SCOUT, best_spawn_location, (int(self.my_MP//1)))
             self.last_attack_turn = game_state.turn_number
+        elif(interception_probability>=1/2):
+            game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, 1)
+            self.last_interceptor_turn = game_state.turn_number
+            self.consecutive_interceptor_uses += 1
             
         
         # Store only resources for next turn (not enemy units - those will be updated in on_action_frame)
