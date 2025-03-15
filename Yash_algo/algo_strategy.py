@@ -12,7 +12,6 @@ BEST_SCOUT_SPAWN_LOCATION = None
 BEST_DEFENSE_SCORE = 0
 
 
-
 class AttackManager:
     def __init__(self):
         self.last_attack_turn = 0
@@ -20,14 +19,19 @@ class AttackManager:
         self.consecutive_interceptor_uses = 0
 
         self.previous_enemy_units = {"walls": [], "turrets": [], "supports": []}
-        self.previousturn_begin_enemy_resources = {"MP": 5, "SP": 40, "health": 30}
+        self.previous_turn_begin_enemy_resources = {"MP": 5, "SP": 40, "health": 30}
         self.previous_my_resources = {"MP": 5, "SP": 40, "health": 30}
         # Add end-of-turn SP tracking
         self.enemy_end_turn_sp = 40  # Default starting SP
 
         # Add turn tracking to avoid redundant processing
         self.last_processed_turn = -1
-        self.config=None
+        self.config = None
+        
+        # Fixed sigmoid parameters
+        self.sigmoid_center = 15
+        self.sigmoid_steepness = 0.1
+
 
     def enemy_stationary_units(self, game_state):
         walls = []
@@ -69,8 +73,6 @@ class AttackManager:
         all_units["supports"] = supports
         return all_units
 
-
-
     def get_supports_boosting_scout(self, game_state, path):
         """
         Returns the number of scouts that shield the scouts along a given path
@@ -106,7 +108,24 @@ class AttackManager:
         if len(path) >= 16:
             self.interceptor_spawn_location = [2, 11]
 
+    def sigmoid_decreasing(self, x, center=None, steepness=None):
+        """
+        A monotonically decreasing sigmoid function with configurable parameters.
+        """
+        # Use debug parameters if not explicitly provided
+        gamelib.debug_write(f"DEBUG: Sigmoid input: {x}, center: {self.sigmoid_center}, steepness: {self.sigmoid_steepness}")
     
+        z = self.sigmoid_steepness * (x - self.sigmoid_center)
+    
+        # Handle extreme values to prevent overflow
+        if z > 34:  # exp(34) is near the overflow limit
+            return 0
+        elif z < -34:  # exp(-34) is effectively 0
+            return 1
+        else:
+            result = 1 / (1 + math.exp(z))
+            gamelib.debug_write(f"DEBUG: Sigmoid result: {result}")
+            return result
 
     def update_funnel_openings(self, game_state):
         """
@@ -131,8 +150,6 @@ class AttackManager:
         if not game_state.contains_stationary_unit([27, 13]):
             CURRENT_FUNNEL_OPENINGS.append([27, 13])
 
-        gamelib.debug_write(f"Updated funnel openings: {CURRENT_FUNNEL_OPENINGS}")
-
     def update_defense_score(self, game_state, location_options):
         """
         This function helps us find the safest location to spawn moving units from.
@@ -140,16 +157,26 @@ class AttackManager:
         Only considers locations where the path exists and damage incurred is below our threshold.
         """
         score_location_pairs = []
-        w1, w2 = -1.2, 1.35
-        scout_normalising_factor = (5*(max(5,self.enemy_SP))**(2))*((min(game_state.enemy_health, 7))/2) ** (0.2) #  inversely prop to aggressiveness 
-        w2=w2*scout_normalising_factor #inversely prop to aggressive
-        w1=w1/scout_normalising_factor
+        
+        # Fixed parameters
+        w1 = -1  # Damage to supports weight
+        w2 = 1.3   # Damage incurred weight
+        damage_threshold_multiplier = 7.5
+        
+        # Calculate normalization factors
         no_of_scouts = int(self.my_MP // 1)
-        w2 = w2 / ((no_of_scouts) ** (0.25))
-        w3=w1/4
-        w4=w3/2
+        scout_normalising_factor = (no_of_scouts)**(0.7)*((min(game_state.enemy_health, 7))/7) ** (0.1)
+        scout_normalising_factor =1
+        w2 = w2 * scout_normalising_factor
+        w1 = w1 / scout_normalising_factor
+        
+        w3 = w1 / 4  # damage_given_to_turret
+        w4 = w3 / 2  # damage_given_to_wall
+        w5=2
 
-        DAMAGE_THRESHOLD = (no_of_scouts) * 7.5
+        DAMAGE_THRESHOLD = (no_of_scouts) * damage_threshold_multiplier
+        
+        gamelib.debug_write(f"DEBUG: Scout params - w1: {w1}, w2: {w2}, damage_threshold: {DAMAGE_THRESHOLD}")
 
         # Evaluate each possible spawn location
         for location in location_options:
@@ -161,8 +188,8 @@ class AttackManager:
                     game_state, path
                 ) * (no_of_scouts)
                 damage_to_supports = 0
-                damage_to_turrets=0
-                damage_to_walls=0
+                damage_to_turrets = 0
+                damage_to_walls = 0
                 path_is_safe = True
 
                 # Calculate damage along the path
@@ -178,21 +205,19 @@ class AttackManager:
                         path_is_safe = False
                         break
                     # Calculate potential damage to enemy supports
-                    x,y=path_location[0],path_location[1]
-                    target=game_state.get_target(gamelib.GameUnit(SCOUT, game_state.config,0,None,x,y))
-                    if(target):
-                        if(target.unit_type=="EF" ):
-                            damage_to_supports+=max(12,no_of_scouts*2)-12#less than 12 damage is useless
-                        elif(target.unit_type=="FF") :
-                            damage_to_walls+=max(16,no_of_scouts*2)-16
-                        elif(target.unit_type=="DF" ):
-                            damage_to_turrets+=max(16,no_of_scouts*2)-16
+                    x, y = path_location[0], path_location[1]
+                    target = game_state.get_target(gamelib.GameUnit(SCOUT, game_state.config, 0, None, x, y))
+                    if target:
+                        if target.unit_type == "EF":
+                            damage_to_supports += no_of_scouts*2  # less than 12 damage is useless
+                        elif target.unit_type == "FF":
+                            damage_to_walls += no_of_scouts*2
+                        elif target.unit_type == "DF":
+                            damage_to_turrets += no_of_scouts*2 
 
                 # Only add to our list if the path is safe
                 if path_is_safe:
-                    # #dont let damage_incurred get below 0
-                    # damage_incurred = max(0,damage_incurred)
-                    defense_score = w1 * damage_to_supports + w2 * damage_incurred +w3*damage_to_turrets+w4*damage_to_walls
+                    defense_score = w1 * damage_to_supports + w2 * damage_incurred + w3 * damage_to_turrets + w4 * damage_to_walls+ w5*(self.enemy_SP)**(0.9)
                     score_location_pairs.append((defense_score, location))
 
         # Update global variables with the best score and location
@@ -203,10 +228,12 @@ class AttackManager:
             score_location_pairs.sort()
             BEST_DEFENSE_SCORE = score_location_pairs[0][0]
             BEST_SCOUT_SPAWN_LOCATION = score_location_pairs[0][1]
+            gamelib.debug_write(f"DEBUG: Best defense score: {BEST_DEFENSE_SCORE}")
         else:
             # Handle the case where no valid paths are found
             BEST_DEFENSE_SCORE = 10000
             BEST_SCOUT_SPAWN_LOCATION = None
+            gamelib.debug_write("DEBUG: No valid paths found")
 
         return
 
@@ -225,10 +252,6 @@ class AttackManager:
         prev_turn_end_enemy_SP = self.enemy_end_turn_sp
         # Each turn players gain 5 SP
         sp_gained_from_removal = max(0, self.enemy_SP - prev_turn_end_enemy_SP - 5)
-
-        gamelib.debug_write(f"Enemy SP at end of last turn: {prev_turn_end_enemy_SP}")
-        gamelib.debug_write(f"Current enemy SP: {self.enemy_SP}")
-        gamelib.debug_write(f"SP gained from removal: {sp_gained_from_removal}")
 
         # Calculate interceptor probability
         turns_since_interceptor = game_state.turn_number - self.last_interceptor_turn
@@ -261,8 +284,8 @@ class AttackManager:
             for unit in self.my_stationary_units(game_state)["supports"]
         )
         # calculate threat score
-        w1, w2, w3, w4 = 1.9, 4.6, 2.5, 0.56
-        n1, n2, n3 = 21, 0.85, 0.15
+        w1, w2, w3, w4 = 1.9, 3.5, 2.5, 0.56
+        n1, n2, n3 = 19, 0.85, 0.15
         normalizing_factor = (
             n1 * max(1, current_my_supports ** (n2)) * ((self.my_MP) ** (n3))
         )  # decrease interceptors as turns increase
@@ -278,23 +301,20 @@ class AttackManager:
         self.update_funnel_openings(game_state)
 
         for opening in CURRENT_FUNNEL_OPENINGS:
-            if opening[0] <= 17 or opening[0] >= 24:
+            if opening[0] <= 18 or opening[0] >= 24:
                 interception_probability = 0
                 break
 
         interceptor_threshold = 5  # min enemy mp to send interceptor
         min_scouts = 10 if game_state.enemy_health <= 5 else 13
         min_scouts -= len(self.my_stationary_units(game_state)["supports"])
-        if (
+        if not (
             self.enemy_MP >= interceptor_threshold
-            and game_state.turn_number >= 2
+            and game_state.turn_number >= 3
             and self.my_MP < min_scouts
             and current_enemy_supports >= prev_enemy_supports-1
         ):
             interception_probability = 0
-        # game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, num_interceptors)
-        #     self.last_interceptor_turn = game_state.turn_number
-        #     self.consecutive_interceptor_uses += 1
 
         """SCOUT LOGIC"""
         self.update_defense_score(
@@ -305,37 +325,15 @@ class AttackManager:
         best_spawn_location = BEST_SCOUT_SPAWN_LOCATION
         best_defense_score = BEST_DEFENSE_SCORE
         
-
-        def sigmoid_decreasing(x, center=0, steepness=1):
-            """
-            A monotonically decreasing sigmoid-like function.
-            
-            Args:
-                x: Input value (best_defense_score)
-                center: Point where function = 0.5
-                steepness: Controls how steep the transition is
-            
-            Returns:
-                A value between 0 and 1, decreasing as x increases
-            """
-            z = steepness * (x - center)
-    
-            # Handle extreme values to prevent overflow
-            if z > 34:  # exp(34) is near the overflow limit
-                return 0
-            elif z < -34:  # exp(-34) is effectively 0
-                return 1
-            else:
-                return 1 / (1 + math.exp(z))
-
-        scout_sending_factor = sigmoid_decreasing(best_defense_score, center=15, steepness=0.05)
+        # Use the simplified sigmoid function
+        scout_sending_factor = self.sigmoid_decreasing(best_defense_score)
+        gamelib.debug_write(f"DEBUG: Scout factor: {scout_sending_factor}, defense_score: {best_defense_score}")
 
 
         # deciding between scout vs interceptor
         if (
             scout_sending_factor < 1 / 2
             and interception_probability < 1 / 2
-            or game_state.turn_number == 0
         ):
             pass  # do nothing
         elif scout_sending_factor >= interception_probability and self.my_MP >= 5:
@@ -355,6 +353,7 @@ class AttackManager:
         }
 
         return True
+
 
 
 class AlgoStrategy(gamelib.AlgoCore):
@@ -425,7 +424,10 @@ class AlgoStrategy(gamelib.AlgoCore):
         # First, place basic defenses
         self.build_defences(game_state)
         # Use our new attack manager to execute attacks
+
         attack_executed = self.attack_manager.execute_attack(game_state)
+
+
 
     def build_defences(self, game_state):
         """
@@ -453,13 +455,13 @@ class AlgoStrategy(gamelib.AlgoCore):
         support_walls = []
         game_state.attempt_spawn(WALL, wall_locations)
         # 1st support
-        support_locations = [[14, 0], [15, 1], [16, 2], [15, 2]]
+        support_locations = [[15, 1],[14, 0],[16, 2], [15, 2]]
         if game_state.turn_number == 1:
             game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])
             self.support_index = (self.support_index + 1) % len(support_locations)
 
         for x in range(6, 25):
-            if x % 3 != 2 and not (21 <= x <= 22):
+            if x % 3 != 2 and not (21 <= x <= 22) :
                 if game_state.get_resources(0)[
                     0
                 ] >= 4 and game_state.contains_stationary_unit(
@@ -530,7 +532,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             and game_state.turn_number - self.last_support_turn > 1
             and sp_needed_to_replace_removed <= 6
         ):
-            game_state.attempt_upgrade(support_locations)
+            game_state.attempt_upgrade([support for support in support_locations if support.health>=9])
             if game_state.attempt_spawn(SUPPORT, support_locations[self.support_index]):
                 self.support_index = (self.support_index + 1) % len(support_locations)
 
@@ -597,6 +599,8 @@ class AlgoStrategy(gamelib.AlgoCore):
             gamelib.debug_write(
                 f"Updated previous_enemy_units with end-of-turn data for turn {current_turn}"
             )
+            
+
 
         # Process breaches
         events = state.get("events", {})
