@@ -106,6 +106,33 @@ class AttackManager:
         if len(path) >= 16:
             self.interceptor_spawn_location = [2, 11]
 
+    
+
+    def update_funnel_openings(self, game_state):
+        """
+        Analyzes the current game state to identify and update funnel openings.
+        This should be called after all defenses are placed for a turn.
+
+        Args:
+            game_state: Current game state to analyze
+        """
+        global CURRENT_FUNNEL_OPENINGS
+        CURRENT_FUNNEL_OPENINGS = []
+        defense_line_y = 12  # The y-coordinate of your main defensive line
+
+        # Check each position along the defensive line
+        for x in range(1, 27):
+            # If there's no unit at this position, it's an opening
+            if not game_state.contains_stationary_unit([x, defense_line_y]):
+                CURRENT_FUNNEL_OPENINGS.append([x, defense_line_y])
+
+        if not game_state.contains_stationary_unit([0, 13]):
+            CURRENT_FUNNEL_OPENINGS.append([0, 13])
+        if not game_state.contains_stationary_unit([27, 13]):
+            CURRENT_FUNNEL_OPENINGS.append([27, 13])
+
+        gamelib.debug_write(f"Updated funnel openings: {CURRENT_FUNNEL_OPENINGS}")
+
     def update_defense_score(self, game_state, location_options):
         """
         This function helps us find the safest location to spawn moving units from.
@@ -113,8 +140,8 @@ class AttackManager:
         Only considers locations where the path exists and damage incurred is below our threshold.
         """
         score_location_pairs = []
-        w1, w2 = -0.9, 1.35
-        scout_normalising_factor = (5*(max(5,self.enemy_SP))**(0.7))*((min(game_state.enemy_health, 7))/2) ** (0.2) #  inversely prop to aggressiveness 
+        w1, w2 = -1.2, 1.35
+        scout_normalising_factor = (5*(max(5,self.enemy_SP))**(2))*((min(game_state.enemy_health, 7))/2) ** (0.2) #  inversely prop to aggressiveness 
         w2=w2*scout_normalising_factor #inversely prop to aggressive
         w1=w1/scout_normalising_factor
         no_of_scouts = int(self.my_MP // 1)
@@ -122,7 +149,7 @@ class AttackManager:
         w3=w1/4
         w4=w3/2
 
-        DAMAGE_THRESHOLD = (no_of_scouts) * 6.5
+        DAMAGE_THRESHOLD = (no_of_scouts) * 7.5
 
         # Evaluate each possible spawn location
         for location in location_options:
@@ -155,7 +182,7 @@ class AttackManager:
                     target=game_state.get_target(gamelib.GameUnit(SCOUT, game_state.config,0,None,x,y))
                     if(target):
                         if(target.unit_type=="EF" ):
-                            damage_to_supports+=max(10,no_of_scouts*2)-10#less than 10 damage is useless
+                            damage_to_supports+=max(12,no_of_scouts*2)-12#less than 12 damage is useless
                         elif(target.unit_type=="FF") :
                             damage_to_walls+=max(16,no_of_scouts*2)-16
                         elif(target.unit_type=="DF" ):
@@ -182,31 +209,6 @@ class AttackManager:
             BEST_SCOUT_SPAWN_LOCATION = None
 
         return
-
-    def update_funnel_openings(self, game_state):
-        """
-        Analyzes the current game state to identify and update funnel openings.
-        This should be called after all defenses are placed for a turn.
-
-        Args:
-            game_state: Current game state to analyze
-        """
-        global CURRENT_FUNNEL_OPENINGS
-        CURRENT_FUNNEL_OPENINGS = []
-        defense_line_y = 12  # The y-coordinate of your main defensive line
-
-        # Check each position along the defensive line
-        for x in range(1, 27):
-            # If there's no unit at this position, it's an opening
-            if not game_state.contains_stationary_unit([x, defense_line_y]):
-                CURRENT_FUNNEL_OPENINGS.append([x, defense_line_y])
-
-        if not game_state.contains_stationary_unit([0, 13]):
-            CURRENT_FUNNEL_OPENINGS.append([0, 13])
-        if not game_state.contains_stationary_unit([27, 13]):
-            CURRENT_FUNNEL_OPENINGS.append([27, 13])
-
-        gamelib.debug_write(f"Updated funnel openings: {CURRENT_FUNNEL_OPENINGS}")
 
     def execute_attack(self, game_state):
         self.enemy_defenses = self.enemy_stationary_units(game_state)
@@ -303,7 +305,6 @@ class AttackManager:
         best_spawn_location = BEST_SCOUT_SPAWN_LOCATION
         best_defense_score = BEST_DEFENSE_SCORE
         
-        
 
         def sigmoid_decreasing(x, center=0, steepness=1):
             """
@@ -317,9 +318,17 @@ class AttackManager:
             Returns:
                 A value between 0 and 1, decreasing as x increases
             """
-            return 1 / (1 + math.exp(steepness * (x - center)))
+            z = steepness * (x - center)
+    
+            # Handle extreme values to prevent overflow
+            if z > 34:  # exp(34) is near the overflow limit
+                return 0
+            elif z < -34:  # exp(-34) is effectively 0
+                return 1
+            else:
+                return 1 / (1 + math.exp(z))
 
-        scout_sending_factor = sigmoid_decreasing(best_defense_score, center=0, steepness=1)
+        scout_sending_factor = sigmoid_decreasing(best_defense_score, center=15, steepness=0.05)
 
 
         # deciding between scout vs interceptor
