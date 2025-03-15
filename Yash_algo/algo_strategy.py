@@ -151,13 +151,9 @@ class AttackManager:
         if not game_state.contains_stationary_unit([27, 13]):
             CURRENT_FUNNEL_OPENINGS.append([27, 13])
 
-<<<<<<< Updated upstream
-    def update_defense_score(self, game_state, location_options):
-=======
         gamelib.debug_write(f"Updated funnel openings: {CURRENT_FUNNEL_OPENINGS}")
 
     def update_defense_score(self, game_state, location_options, on_copy=False):
->>>>>>> Stashed changes
         """
         This function helps us find the safest location to spawn moving units from.
         It analyzes each potential path for damage risk and potential damage to enemy supports.
@@ -231,32 +227,20 @@ class AttackManager:
             # Update global variables with the best score and location
             global BEST_SCOUT_SPAWN_LOCATION, BEST_DEFENSE_SCORE
 
-<<<<<<< Updated upstream
-        if score_location_pairs:
-            # Sort by score (lower is better since we want to minimize damage taken)
-            score_location_pairs.sort()
-            BEST_DEFENSE_SCORE = score_location_pairs[0][0]
-            BEST_SCOUT_SPAWN_LOCATION = score_location_pairs[0][1]
-            gamelib.debug_write(f"DEBUG: Best defense score: {BEST_DEFENSE_SCORE}")
-        else:
-            # Handle the case where no valid paths are found
-            BEST_DEFENSE_SCORE = 10000
-            BEST_SCOUT_SPAWN_LOCATION = None
-            gamelib.debug_write("DEBUG: No valid paths found")
-
-=======
             if score_location_pairs:
                 # Sort by score (lower is better since we want to minimize damage taken)
                 score_location_pairs.sort()
                 BEST_DEFENSE_SCORE = score_location_pairs[0][0]
                 BEST_SCOUT_SPAWN_LOCATION = score_location_pairs[0][1]
+                gamelib.debug_write(f"DEBUG: Best defense score: {BEST_DEFENSE_SCORE}")
             else:
                 # Handle the case where no valid paths are found
                 BEST_DEFENSE_SCORE = 10000
                 BEST_SCOUT_SPAWN_LOCATION = None
+                gamelib.debug_write("DEBUG: No valid paths found")
+
         else:
             return None if not score_location_pairs else score_location_pairs[0]
->>>>>>> Stashed changes
         return
     
     def nowall_defense_score_checker(self, game_state, walls):
@@ -521,11 +505,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             self.support_index = (self.support_index + 1) % len(support_locations)
 
         for x in range(6, 25):
-<<<<<<< Updated upstream
-            if x % 3 != 2 and not (21 <= x <= 22) :
-=======
             if x % 3 != 2 and not (21 <= x <= 22) and [x,y] not in WALL_OPENINGS:
->>>>>>> Stashed changes
                 if game_state.get_resources(0)[
                     0
                 ] >= 4 and game_state.contains_stationary_unit(
