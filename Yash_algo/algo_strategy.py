@@ -8,6 +8,8 @@ import copy
 
 # Global variable to store current funnel openings
 CURRENT_FUNNEL_OPENINGS = []
+BEST_SCOUT_SPAWN_LOCATION=None
+BEST_DEFENSE_SCORE=float(0)
 
 class AttackManager:
     def __init__(self):
@@ -79,18 +81,18 @@ class AttackManager:
         '''
         possible_locations = game_state.game_map.get_locations_in_range(location, gamelib.GameUnit(SCOUT, game_state.config).attackRange)
         for point in possible_locations:
-            if game_state.game_map[point][0].unit_type == SUPPORT:
+            if game_state.game_map[point] and game_state.game_map[point][0].unit_type == SUPPORT:
                 supports_attacked.append(point)
         return supports_attacked
     
     def get_supports_boosting_scout(self, game_state, path):
         '''
         Returns the number of scouts that shield the scouts along a given path
-        We just want the number of supports in the range of the scout path 
+        We just want the shileding provided in the range of the scout path 
         '''
         supports_on_map = []
-        for y in range(14,28): #enemy half y coordinates
-                for x in range(y-14,42-y):
+        for y in range(0,13): #my half y coordinates
+                for x in range(13-y,15+y):
                     if(game_state.game_map[x,y]):
                         unit = game_state.game_map[x,y][0]
                         if(unit.unit_type=="EF"):
@@ -98,15 +100,14 @@ class AttackManager:
         supports_boosting = set()
         for path_location in path:
             for support in supports_on_map:
-                if game_state.game_map.distance_between_locations(path_location, support.location) <= support.shieldRange:
+                if game_state.game_map.distance_between_locations(path_location, [support.x,support.y]) <= support.shieldRange:
                     supports_boosting.add(support)
         boost=0
         for support in supports_boosting:
             boost += support.shieldPerUnit
         return boost
 
-
-    def scout_attack_scorer(self, game_state, location_options):
+    def update_defense_score(self, game_state, location_options):
         """
         This function will help us guess which location is the safest to spawn moving units from.
         It gets the path the unit will take then checks locations on that path to 
@@ -114,22 +115,34 @@ class AttackManager:
         Returns a weighted sum of the damage it incurs and the damage it causes. We want it to  cause maximum 
         damage and incur minimum possible damage
         """
-        damages = []
+        defense_scores_per_coordinate = []
+        w1,w2=-1,1
+        safe=True
+        DAMAGE_THRESHOLD = 150 # '''CHECK THIS AGAIN'''
         # Get the damage estimate each path will take
         for location in location_options:
             path = game_state.find_path_to_edge(location)
             # Get number of supports helping the scouts over the path and add the boost we get from them
-            damage_incurred = -self.get_supports_boosting_scout(game_state, path)
+            damage_incurred = 0
             damage_to_supports = 0
-            for path_location in path:
-                # Get number of enemy turrets that can attack each location and multiply by turret damage
-                damage_incurred += len(game_state.get_attackers(path_location, 0)) * gamelib.GameUnit(TURRET, game_state.config).damage_i
-                # Get number of enemy supports that are attacked at each location and multiply by scout damage
-                damage_to_supports += len(self.get_supports_attacked_by_scout(game_state,path_location)) * gamelib.GameUnit(SCOUT, game_state.config).damage_i
-            damages.append(damage_to_supports - damage_incurred)
+            if path: 
+                damage_incurred = -self.get_supports_boosting_scout(game_state, path)
+                for path_location in path:
+                    # Get number of enemy turrets that can attack each location and multiply by turret damage
+                    damage_incurred += len(game_state.get_attackers(path_location, 0)) * gamelib.GameUnit(TURRET, game_state.config).damage_i
+                    if damage_incurred >= DAMAGE_THRESHOLD: safe=False
+                    else: safe=True
+                    # Get number of enemy supports that are attacked at each location and multiply by scout damage
+                    damage_to_supports += len(self.get_supports_attacked_by_scout(game_state,path_location)) * gamelib.GameUnit(SCOUT, game_state.config).damage_i
+                defense_scores_per_coordinate.append([float('inf'), w1*damage_to_supports + w2*damage_incurred][safe])
+            else: defense_scores_per_coordinate.append(float('inf'))
 
-        # Now just return the location that takes the least damage and gives maximum damage to support
-        return location_options[damages.index(min(damages))]
+        # Now just return the  and score that takes the least damage and gives maximum damage to support
+        global BEST_SCOUT_SPAWN_LOCATION
+        BEST_SCOUT_SPAWN_LOCATION = location_options[defense_scores_per_coordinate.index(min(defense_scores_per_coordinate))]
+        global BEST_DEFENSE_SCORE
+        BEST_DEFENSE_SCORE = min(defense_scores_per_coordinate)
+        return
 
  
     def update_funnel_openings(self, game_state):
@@ -189,7 +202,7 @@ class AttackManager:
         current_enemy_supports = sum([(1 + unit.upgraded) for unit in self.enemy_defenses["supports"] ])
         prev_enemy_supports=sum([(1 + unit.upgraded) for unit in self.previous_enemy_units["supports"] ])
         #calculate threat score
-        w1, w2,w3 = 1.9, 4, 2.6
+        w1, w2,w3 = 1.9, 4, 2.3
         normalizing_factor = 17*(max(1,len(self.my_stationary_units(game_state)["supports"]))**(1))*(self.my_MP)**(0.2) #decrease interceptors as turns increase
         threat_score = ((w1 * (self.enemy_MP**(w3))) ** (((current_enemy_supports + future_supports) ** 0.51) / w2 +0.1)) / normalizing_factor
         
@@ -210,15 +223,22 @@ class AttackManager:
         min_scouts-=len(self.my_stationary_units(game_state)["supports"])
 
 
-        interceptor_threshold = 5 if 5>=game_state.turn_number>=3 else 7  #min enemy mp to send interceptor
+        interceptor_threshold = 5   #min enemy mp to send interceptor
         if (self.enemy_MP >= interceptor_threshold and game_state.turn_number >=2 and self.my_MP<min_scouts and current_enemy_supports>=prev_enemy_supports):
             game_state.attempt_spawn(INTERCEPTOR, interceptor_spawn_location, num_interceptors)
             self.last_interceptor_turn = game_state.turn_number
             self.consecutive_interceptor_uses += 1
         
-        if self.my_MP >= min_scouts or game_state.turn_number==1:
-            game_state.attempt_spawn(SCOUT, [4, 9], math.floor(self.my_MP))
-            self.last_attack_turn = game_state.turn_number
+        '''SCOUT LOGIC'''
+        self.update_defense_score(game_state, game_state.game_map.get_edge_locations(2)+game_state.game_map.get_edge_locations(3))
+        best_spawn_location = BEST_SCOUT_SPAWN_LOCATION
+        best_defense_score = BEST_DEFENSE_SCORE  
+        scout_normalising_factor = 10.0
+        num_scouts = (int(best_defense_score//scout_normalising_factor))
+        # if num_scouts<=4:
+        #     num_scouts=0
+        game_state.attempt_spawn(SCOUT, best_spawn_location, num_scouts)
+        self.last_attack_turn = game_state.turn_number
             
         
         # Store only resources for next turn (not enemy units - those will be updated in on_action_frame)
