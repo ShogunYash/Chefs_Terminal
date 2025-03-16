@@ -168,7 +168,7 @@ class AttackManager:
         w_broken=- 13/(self.enemy_SP)**(0.5)   #weight for breaking enemy units,check if its negative
         
         # Calculate normalization factors
-        no_of_scouts = int(math.floor(game_state.get_resources(0)[1]) // 1) + 4*on_copy
+        no_of_scouts = int(math.floor(game_state.get_resources(0)[1]) // 1) + 3.5*on_copy
         # scout_normalising_factor = (no_of_scouts)**(0.5)   #inversely prop to damage incurred weight
         scout_normalising_factor = (((min(10,no_of_scouts+1)/10)**2.7)*no_of_scouts)**(0.8)  #inversely prop to damage incurred weight
     #    *((min(game_state.enemy_health, 7))/7) ** (0.1)
@@ -527,6 +527,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         ]
         support_walls = []
         sp_needed_to_replace_removed = 0
+        #keep this as reserved sp
         global WALL_OPENINGS
         if(WALL_OPENINGS):
             sp_needed_to_replace_removed+=2
@@ -604,7 +605,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         # Build turrets on the back
         (
             game_state.attempt_spawn(TURRET, [22, 10])
-            if sp_needed_to_replace_removed <= 7
+            if sp_needed_to_replace_removed-6<=4 
             else None
         )
 
@@ -614,7 +615,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         if (
             game_state.turn_number > 3
             and game_state.turn_number - self.last_support_turn > 1
-            and sp_needed_to_replace_removed <= 6
+            and sp_needed_to_replace_removed-4 <=10
         ):  
             for location in support_locations:
                 if game_state.game_map[location[0],location[1]]:
@@ -627,7 +628,7 @@ class AlgoStrategy(gamelib.AlgoCore):
 
         # Attempt create walls to protect upgraded turrets
         for x in range(20, 11, -6):
-            if game_state.game_map[x, y] and sp_needed_to_replace_removed <= 7:
+            if game_state.game_map[x, y] and sp_needed_to_replace_removed-5<2:
                 unit = game_state.game_map[x, y][0]
                 if (
                     unit.unit_type == "DF"
@@ -642,7 +643,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             if (
                 game_state.game_map[x, y]
                 and game_state.turn_number >= 3
-                and sp_needed_to_replace_removed <= 6
+                and sp_needed_to_replace_removed-5 <2
             ):
                 game_state.attempt_upgrade([x, y + 1])
         # now try to upgrade some of the normal walls
