@@ -165,11 +165,11 @@ class AttackManager:
        
         w2 = 1.3   # Damage incurred weight
         damage_threshold_multiplier = 7.5
-        w_broken=20/(self.enemy_SP)**(0.5)#weight for breaking enemy units
+        w_broken=35/(self.enemy_SP)**(0.5)#weight for breaking enemy units
         
         # Calculate normalization factors
         no_of_scouts = int(self.my_MP // 1)
-        scout_normalising_factor = (no_of_scouts/5)**(0.7)#inversly prop to damage incurred weight
+        scout_normalising_factor = (no_of_scouts)**(0.4)#inversely prop to damage incurred weight
     #    *((min(game_state.enemy_health, 7))/7) ** (0.1)
         w2 = w2 / scout_normalising_factor
         # w_broken = w_broken / scout_normalising_factor
@@ -224,7 +224,7 @@ class AttackManager:
 
                 # Only add to our list if the path is safe
                 if path_is_safe:
-                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(self.enemy_SP)**(0.9)
+                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(self.enemy_SP)**(1.35)
                     score_location_pairs.append((defense_score, location))
 
         if not on_copy:
@@ -254,7 +254,9 @@ class AttackManager:
         Out of the list we return the one with the least defense score
         '''
         min_nowall_defense_score = 100001
-        best_nowall_location,best_nowall_spawn_location = None, None
+       
+
+
         for wall in walls:
             x,y=wall.x,wall.y
             placeholder = game_state.game_map[x,y].copy()
@@ -269,7 +271,7 @@ class AttackManager:
             game_state.game_map[x,y] = placeholder
         # this update below is probably redundant
         self.update_defense_score(game_state, game_state.game_map.get_edge_locations(2)+game_state.game_map.get_edge_locations(3))
-        return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE]
+        return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-30]
 
 
     def execute_attack(self, game_state):
@@ -360,7 +362,7 @@ class AttackManager:
 
         # Check if we can remove a wall to improve the defense_score
         walls = self.my_stationary_units(game_state)['walls']
-        walls = [unit for unit in walls if [unit.x, unit.y] not in [[24, 12], [25, 12], [26, 12],[27,13]]]
+        walls = [unit for unit in walls if unit.x<=10]
         new = self.nowall_defense_score_checker(game_state, walls)
         if new:
             new_defense_score, nowall_location, new_spawn_location = new
@@ -584,7 +586,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                 if game_state.game_map[location[0],location[1]]:
                     unit = game_state.game_map[location[0],location[1]][0]
                     if(unit.health<=9):
-                        game_state.attempt_upgrade(location[0],location[1])
+                        game_state.attempt_upgrade((location[0],location[1]))
             
             if game_state.attempt_spawn(SUPPORT, support_locations[self.support_index]):
                 self.support_index = (self.support_index + 1) % len(support_locations)
