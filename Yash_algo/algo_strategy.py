@@ -254,7 +254,6 @@ class AttackManager:
 
         else:
             return None if not score_location_pairs else score_location_pairs[0]
-        return
     
     def nowall_defense_score_checker(self, game_state, walls):
         '''
@@ -268,7 +267,7 @@ class AttackManager:
 
         for wall in walls:
             x,y=wall.x,wall.y
-            placeholder = game_state.game_map[x,y].copy()
+            placeholder = copy.deepcopy(game_state.game_map[x,y])
             game_state.game_map[x,y] = []
             nowall_data = self.update_defense_score(game_state, game_state.game_map.get_edge_locations(2)+game_state.game_map.get_edge_locations(3),on_copy=True)
             if nowall_data:
@@ -278,7 +277,7 @@ class AttackManager:
                     min_nowall_defense_score=score
                     best_nowall_location=[wall.x,wall.y]
                     best_nowall_spawn_location=spawn
-            game_state.game_map[x,y] = placeholder
+            game_state.game_map[x,y] = copy.deepcopy(placeholder)
         
         if any_nowall_data:
             return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-45]
