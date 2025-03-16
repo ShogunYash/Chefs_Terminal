@@ -163,12 +163,12 @@ class AttackManager:
         
         # Fixed parameters
        
-        w2 = 1.7   # Damage incurred weight
+        w2 = 2.1   # Damage incurred weight
         damage_threshold_multiplier = 7.5
         w_broken=- 25/(self.enemy_SP)**(0.5)#weight for breaking enemy units,check if its negative
         
         # Calculate normalization factors
-        no_of_scouts = int(self.my_MP // 1) + 5*on_copy
+        no_of_scouts = int(math.floor(game_state.get_resources(0)[1]) // 1) + 2.5*on_copy
         scout_normalising_factor = (no_of_scouts)**(0.9)#inversely prop to damage incurred weight
     #    *((min(game_state.enemy_health, 7))/7) ** (0.1)
         w2 = w2 / scout_normalising_factor
@@ -178,7 +178,7 @@ class AttackManager:
         w4 = w_broken  # damage_given_to_wall
         w5=1.5#for enemy sp
 
-        DAMAGE_THRESHOLD = (no_of_scouts) * damage_threshold_multiplier
+        DAMAGE_THRESHOLD = (no_of_scouts**1.1) * damage_threshold_multiplier
         
         gamelib.debug_write(f"DEBUG: Scout params - w_broken: {w_broken}, w2: {w2}, damage_threshold: {DAMAGE_THRESHOLD}")
 
@@ -190,13 +190,12 @@ class AttackManager:
             if path:
                 damage_incurred = -self.get_supports_boosting_scout(
                     game_state, path
-                ) * ((min(no_of_scouts,7)/6)**(1.1))
+                ) * ((min(no_of_scouts,6)/6)**(1.1))* no_of_scouts*0.75
                 broken_supports = 0
                 broken_turrets = 0
                 broken_walls = 0
                 path_is_safe = True
                 targets_with_og_health=[]
-
                 # Calculate damage along the path
                 for path_location in path:
                     # Get number of enemy turrets that can attack and calculate damage
