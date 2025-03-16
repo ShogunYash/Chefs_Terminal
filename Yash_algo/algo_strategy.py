@@ -608,7 +608,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             for location in support_locations:
                 if game_state.game_map[location[0],location[1]]:
                     unit = game_state.game_map[location[0],location[1]][0]
-                    if(unit.health<=9):
+                    if(unit.health>=9):
                         game_state.attempt_upgrade((location[0],location[1]))
             
             if game_state.attempt_spawn(SUPPORT, support_locations[self.support_index]):
