@@ -163,20 +163,20 @@ class AttackManager:
         
         # Fixed parameters
        
-        w2 = 1.3   # Damage incurred weight
+        w2 = 1.4   # Damage incurred weight
         damage_threshold_multiplier = 7.5
-        w_broken=35/(self.enemy_SP)**(0.5)#weight for breaking enemy units
+        w_broken=- 40/(self.enemy_SP)**(0.5)#weight for breaking enemy units,check if its negative
         
         # Calculate normalization factors
         no_of_scouts = int(self.my_MP // 1)
-        scout_normalising_factor = (no_of_scouts)**(0.4)#inversely prop to damage incurred weight
+        scout_normalising_factor = (no_of_scouts)**(0.51)#inversely prop to damage incurred weight
     #    *((min(game_state.enemy_health, 7))/7) ** (0.1)
         w2 = w2 / scout_normalising_factor
         # w_broken = w_broken / scout_normalising_factor
         
         w3 = w_broken  #brokenF_turret
         w4 = w_broken  # damage_given_to_wall
-        w5=2#for enemy sp
+        w5=1.5#for enemy sp
 
         DAMAGE_THRESHOLD = (no_of_scouts) * damage_threshold_multiplier
         
@@ -195,6 +195,7 @@ class AttackManager:
                 broken_turrets = 0
                 broken_walls = 0
                 path_is_safe = True
+                targets_with_og_health=[]
 
                 # Calculate damage along the path
                 for path_location in path:
@@ -212,19 +213,27 @@ class AttackManager:
                     x, y = path_location[0], path_location[1]
                     target = game_state.get_target(gamelib.GameUnit(SCOUT, game_state.config, 0, None, x, y))
                     if target:
+                        if(target not in {x[0] for x in targets_with_og_health}):
+                            original_target_health=target.health
+                            targets_with_og_health.append((target,original_target_health ))#append only initially
+                        target.health-=2*no_of_scouts
                         if target.unit_type == "EF":
-                            if(target.health)<=2*no_of_scouts:
+                            if(target.health)<=0:
                                 broken_supports+=1
                         elif target.unit_type == "FF":
-                            if(target.health)<=2*no_of_scouts:
+                            if(target.health)<=0:
                                 broken_walls+=1
                         elif target.unit_type == "DF":
-                            if(target.health)<=2*no_of_scouts:
+                            if(target.health)<=0:
                                 broken_turrets+=1
-
+                        
+                    
+                #replenish all health
+                for items in targets_with_og_health:
+                    items[0].health=items[1]
                 # Only add to our list if the path is safe
                 if path_is_safe:
-                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(self.enemy_SP)**(1.35)
+                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(self.enemy_SP)**(0.9)
                     score_location_pairs.append((defense_score, location))
 
         if not on_copy:
@@ -255,7 +264,7 @@ class AttackManager:
         '''
         min_nowall_defense_score = 100001
        
-
+        any_nowall_data=False
 
         for wall in walls:
             x,y=wall.x,wall.y
@@ -263,15 +272,18 @@ class AttackManager:
             game_state.game_map[x,y] = []
             nowall_data = self.update_defense_score(game_state, game_state.game_map.get_edge_locations(2)+game_state.game_map.get_edge_locations(3),on_copy=True)
             if nowall_data:
+                any_nowall_data=True
                 score,spawn = nowall_data
                 if score<min_nowall_defense_score:
                     min_nowall_defense_score=score
                     best_nowall_location=[wall.x,wall.y]
                     best_nowall_spawn_location=spawn
             game_state.game_map[x,y] = placeholder
-        # this update below is probably redundant
-        self.update_defense_score(game_state, game_state.game_map.get_edge_locations(2)+game_state.game_map.get_edge_locations(3))
-        return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-30]
+        
+        if any_nowall_data:
+            return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-45]
+        else:
+            return []
 
 
     def execute_attack(self, game_state):
