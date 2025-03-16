@@ -626,6 +626,11 @@ class AlgoStrategy(gamelib.AlgoCore):
             if game_state.attempt_spawn(SUPPORT, support_locations[self.support_index]):
                 self.support_index = (self.support_index + 1) % len(support_locations)
 
+        my_supports= AttackManager.my_stationary_units(game_state)['supports']
+        if(sum(1+unit.upgraded for unit in my_supports)>=2 and sp_needed_to_replace_removed<=6 and game_state.get_resources(0)[0]>=2+sp_needed_to_close_wall):
+            if(game_state.attempt_spawn(WALL,[15,3] ) and game_state.get_resources(0)[0]>=1+sp_needed_to_close_wall) and game_state.game_map[15,3][0].health<30 :
+                game_state.attempt_upgrade([15,3])
+        
         # Attempt create walls to protect upgraded turrets
         for x in range(20, 11, -6):
             if game_state.game_map[x, y] and sp_needed_to_replace_removed<=5 and game_state.get_resources(0)[0]>=2+ sp_needed_to_close_wall:
