@@ -175,7 +175,7 @@ class AttackManager:
         # w_broken = w_broken / scout_normalising_factor
         
         w3 = w_broken/3  #brokenF_turret
-        w4 = w_broken/3  # damage_given_to_wall
+        w4 = w_broken/4  # damage_given_to_wall
         w5=1.5#for enemy sp
 
         DAMAGE_THRESHOLD = (no_of_scouts**1.1) * damage_threshold_multiplier
@@ -309,7 +309,7 @@ class AttackManager:
         cooldown_factor = (
             1.0
             if turns_since_interceptor > 1
-            else [1.0, 0.64, 0.4][min(self.consecutive_interceptor_uses, 2)]
+            else [1.0, 0.64*(max(1,self.enemy_MP/7)**(1.15)), 0.4*(max(1,self.enemy_MP/7)**(1.15))][min(self.consecutive_interceptor_uses, 2)]
         )
 
         self.consecutive_interceptor_uses = (
@@ -335,15 +335,14 @@ class AttackManager:
         )
         # calculate threat score
         w1, w2, w3, w4 = 1.9, 3.5, 2.5, 0.56
-        n1, n2, n3 = 19, 0.85, 0.15
+        n1, n2, n3 = 19, 0.75, 0.15
         normalizing_factor = (
-            n1 * max(1, current_my_supports ** (n2)) * ((self.my_MP) ** (n3))
+            n1 * max(1, current_my_supports ** (n2)) * ((self.my_MP) ** (n3)) 
         )  # decrease interceptors as turns increase
         threat_score = (
-            w1
-            * (max(0, self.enemy_MP - 1) ** (w3))
-            ** (((current_enemy_supports + future_supports) ** w4) / w2 + 0.1)
-        ) / normalizing_factor
+            (w1
+            * ((max(0, self.enemy_MP - 1)) )** (w3))** (((current_enemy_supports + future_supports) ** w4) / w2 + 0.1)
+         )/ normalizing_factor
 
         # Determine attack strategy
         interception_probability = threat_score * cooldown_factor
