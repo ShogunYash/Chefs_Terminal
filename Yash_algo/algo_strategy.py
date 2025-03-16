@@ -177,7 +177,7 @@ class AttackManager:
         
         w3 = w_broken/5  #brokenF_turret
         w4 = w_broken/6  # damage_given_to_wall
-        w5=1.5/((no_of_scouts+1)/9)**4           #for enemy sp
+        w5=2/((no_of_scouts+1)/9)**5         #for enemy sp
         w6 = ((min(no_of_scouts,6)/6)**(1.1))* no_of_scouts * 0.83      # Support boosting weight
 
         DAMAGE_THRESHOLD = (no_of_scouts**1.1) * damage_threshold_multiplier
@@ -364,7 +364,7 @@ class AttackManager:
         min_scouts = 10 if game_state.enemy_health <= 5 else 13
         min_scouts -= len(self.my_stationary_units(game_state)["supports"])
         if not (game_state.turn_number >= 3
-            and self.my_MP < min_scouts
+            and self.my_MP <= min_scouts
             and current_enemy_supports >= prev_enemy_supports-2
         ):
             interception_probability = 0
@@ -379,7 +379,7 @@ class AttackManager:
         global BEST_SCOUT_SPAWN_LOCATION, BEST_DEFENSE_SCORE, WALL_OPENINGS
         best_spawn_location = BEST_SCOUT_SPAWN_LOCATION
         best_defense_score = BEST_DEFENSE_SCORE
-        for openings in WALL_OPENINGS:
+        for opening in WALL_OPENINGS:
             if(opening not in game_state.find_path_to_edge(best_spawn_location)):
                 game_state.attempt_spawn(WALL,opening)
         
@@ -405,11 +405,11 @@ class AttackManager:
             self.consecutive_interceptor_uses += 1
 
         # Store only resources for next turn (not enemy units - those will be updated in on_action_frame)
-        self.previous_my_resources = {
-            "MP": self.my_MP,
-            "SP": self.my_SP,
-            "health": self.my_health,
-        }
+        # self.previous_my_resources = {
+        #     "MP": self.my_MP,
+        #     "SP": self.my_SP,
+        #     "health": self.my_health,
+        # }
 
         # Check if we can remove a wall to improve the defense_score
         walls = self.my_stationary_units(game_state)['walls']
@@ -626,7 +626,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             if game_state.attempt_spawn(SUPPORT, support_locations[self.support_index]):
                 self.support_index = (self.support_index + 1) % len(support_locations)
 
-        my_supports= AttackManager.my_stationary_units(game_state)['supports']
+        my_supports= self.attack_manager.my_stationary_units(game_state)['supports']
         if(sum(1+unit.upgraded for unit in my_supports)>=2 and sp_needed_to_replace_removed<=6 and game_state.get_resources(0)[0]>=2+sp_needed_to_close_wall):
             if(game_state.attempt_spawn(WALL,[15,3] ) and game_state.get_resources(0)[0]>=1+sp_needed_to_close_wall) and game_state.game_map[15,3][0].health<30 :
                 game_state.attempt_upgrade([15,3])
