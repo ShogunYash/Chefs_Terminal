@@ -405,11 +405,11 @@ class AttackManager:
             self.consecutive_interceptor_uses += 1
 
         # Store only resources for next turn (not enemy units - those will be updated in on_action_frame)
-        # self.previous_my_resources = {
-        #     "MP": self.my_MP,
-        #     "SP": self.my_SP,
-        #     "health": self.my_health,
-        # }
+        self.previous_my_resources = {
+            "MP": self.my_MP,
+            "SP": game_state.get_resources(0)[0],
+            "health": self.my_health,
+        }
 
         # Check if we can remove a wall to improve the defense_score
         walls = self.my_stationary_units(game_state)['walls']
