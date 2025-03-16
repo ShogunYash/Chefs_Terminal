@@ -165,7 +165,7 @@ class AttackManager:
        
         w2 = 2 # Damage incurred weight
         damage_threshold_multiplier = 7.5
-        w_broken=- 13/(self.enemy_SP)**(0.5)   #weight for breaking enemy units,check if its negative
+        w_broken=- 21/(self.enemy_SP)**(0.5)   #weight for breaking enemy units,check if its negative
         
         # Calculate normalization factors
         no_of_scouts = int(math.floor(game_state.get_resources(0)[1]) // 1) + 3.5*on_copy
@@ -175,9 +175,9 @@ class AttackManager:
         w2 = w2 / scout_normalising_factor
         # w_broken = w_broken / scout_normalising_factor
         
-        w3 = w_broken/3  #brokenF_turret
-        w4 = w_broken/4  # damage_given_to_wall
-        w5=1.5           #for enemy sp
+        w3 = w_broken/5  #brokenF_turret
+        w4 = w_broken/6  # damage_given_to_wall
+        w5=1.5/((no_of_scouts+1)/9)**4           #for enemy sp
         w6 = ((min(no_of_scouts,6)/6)**(1.1))* no_of_scouts * 0.83      # Support boosting weight
 
         DAMAGE_THRESHOLD = (no_of_scouts**1.1) * damage_threshold_multiplier
@@ -315,7 +315,7 @@ class AttackManager:
         cooldown_factor = (
             1.0
             if turns_since_interceptor > 1
-            else [1.0, 0.64*(max(1,self.enemy_MP/7)**(1.15)), 0.4*(max(1,self.enemy_MP/7)**(1.15))][min(self.consecutive_interceptor_uses, 2)]
+            else [1.0, 0.64*(max(1,self.enemy_MP/7)**(1.10)), 0.4*(max(1,self.enemy_MP/7)**(1.10))][min(self.consecutive_interceptor_uses, 2)]
         )
 
         self.consecutive_interceptor_uses = (
@@ -340,7 +340,7 @@ class AttackManager:
             for unit in self.my_stationary_units(game_state)["supports"]
         )
         # calculate threat score
-        w1, w2, w3, w4 = 1.9, 3.5, 2.5, 0.56
+        w1, w2, w3, w4 = 1.9, 3.5, 2.5, 0.571
         n1, n2, n3 = 19, 0.75, 0.15
         normalizing_factor = (
             n1 * max(1, current_my_supports ** (n2)) * ((self.my_MP) ** (n3)) 
@@ -360,14 +360,12 @@ class AttackManager:
                 interception_probability = 0
                 break
 
-        interceptor_threshold = 5  # min enemy mp to send interceptor
+      
         min_scouts = 10 if game_state.enemy_health <= 5 else 13
         min_scouts -= len(self.my_stationary_units(game_state)["supports"])
-        if not (
-            self.enemy_MP >= interceptor_threshold
-            and game_state.turn_number >= 3
+        if not (game_state.turn_number >= 3
             and self.my_MP < min_scouts
-            and current_enemy_supports >= prev_enemy_supports-1
+            and current_enemy_supports >= prev_enemy_supports-2
         ):
             interception_probability = 0
 
@@ -384,6 +382,7 @@ class AttackManager:
         for openings in WALL_OPENINGS:
             if(opening not in game_state.find_path_to_edge(best_spawn_location)):
                 game_state.attempt_spawn(WALL,opening)
+        
         
         # Use the simplified sigmoid function
         scout_sending_factor = self.sigmoid_decreasing(best_defense_score)
@@ -414,7 +413,7 @@ class AttackManager:
 
         # Check if we can remove a wall to improve the defense_score
         walls = self.my_stationary_units(game_state)['walls']
-        walls = [unit for unit in walls if (unit.x<=10 and [unit.x,unit.y]!=[1,12]) or unit.x>=25]
+        walls = [unit for unit in walls if (unit.x<=13 and [unit.x,unit.y]!=[1,12]) or unit.x>=25]
 
         new = self.nowall_defense_score_checker(game_state, walls)
         if new:
@@ -499,6 +498,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         # Use our new attack manager to execute attacks
 
         attack_executed = self.attack_manager.execute_attack(game_state)
+        self.build_defences(game_state)
 
 
 
@@ -527,6 +527,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         ]
         support_walls = []
         sp_needed_to_replace_removed = 0
+        sp_needed_to_close_wall=0
         #keep this as reserved sp
         global WALL_OPENINGS
         if(WALL_OPENINGS):
@@ -605,7 +606,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         # Build turrets on the back
         (
             game_state.attempt_spawn(TURRET, [22, 10])
-            if sp_needed_to_replace_removed-6<=4 
+            if sp_needed_to_replace_removed<=7 and game_state.get_resources(0)[0]>= 3+sp_needed_to_close_wall
             else None
         )
 
@@ -615,12 +616,11 @@ class AlgoStrategy(gamelib.AlgoCore):
         if (
             game_state.turn_number > 3
             and game_state.turn_number - self.last_support_turn > 1
-            and sp_needed_to_replace_removed-4 <=10
-        ):  
+            and sp_needed_to_replace_removed<=7 and game_state.get_resources(0)[0]>=4+ sp_needed_to_close_wall     ):  
             for location in support_locations:
                 if game_state.game_map[location[0],location[1]]:
                     unit = game_state.game_map[location[0],location[1]][0]
-                    if(unit.health>=9):
+                    if(unit.health>=9 and game_state.get_resources(0)[0]>=4+  sp_needed_to_close_wall):
                         game_state.attempt_upgrade((location[0],location[1]))
             
             if game_state.attempt_spawn(SUPPORT, support_locations[self.support_index]):
@@ -628,7 +628,7 @@ class AlgoStrategy(gamelib.AlgoCore):
 
         # Attempt create walls to protect upgraded turrets
         for x in range(20, 11, -6):
-            if game_state.game_map[x, y] and sp_needed_to_replace_removed-5<2:
+            if game_state.game_map[x, y] and sp_needed_to_replace_removed<=5 and game_state.get_resources(0)[0]>=2+ sp_needed_to_close_wall:
                 unit = game_state.game_map[x, y][0]
                 if (
                     unit.unit_type == "DF"
@@ -643,7 +643,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             if (
                 game_state.game_map[x, y]
                 and game_state.turn_number >= 3
-                and sp_needed_to_replace_removed-5 <2
+                and sp_needed_to_replace_removed-5 <2 and game_state.get_resources(0)[0]>=1+ sp_needed_to_close_wall
             ):
                 game_state.attempt_upgrade([x, y + 1])
         # now try to upgrade some of the normal walls
