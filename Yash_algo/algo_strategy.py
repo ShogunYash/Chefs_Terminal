@@ -163,9 +163,9 @@ class AttackManager:
         
         # Fixed parameters
        
-        w2 = 1.4   # Damage incurred weight
+        w2 = 1.7   # Damage incurred weight
         damage_threshold_multiplier = 7.5
-        w_broken=- 40/(self.enemy_SP)**(0.5)#weight for breaking enemy units,check if its negative
+        w_broken=- 25/(self.enemy_SP)**(0.5)#weight for breaking enemy units,check if its negative
         
         # Calculate normalization factors
         no_of_scouts = int(self.my_MP // 1)
@@ -233,7 +233,7 @@ class AttackManager:
                     items[0].health=items[1]
                 # Only add to our list if the path is safe
                 if path_is_safe:
-                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(self.enemy_SP)**(0.9)
+                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(max(self.enemy_SP-5,0))**(2)
                     score_location_pairs.append((defense_score, location))
 
         if not on_copy:
@@ -280,7 +280,7 @@ class AttackManager:
             game_state.game_map[x,y] = copy.deepcopy(placeholder)
         
         if any_nowall_data:
-            return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-45]
+            return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-50]
         else:
             return []
 
@@ -296,6 +296,9 @@ class AttackManager:
         self.interceptor_spawn_location = (
             [21, 7] if game_state.contains_stationary_unit([19, 12]) else [25, 11]
         )
+        if len(game_state.get_attackers((22,13),0))>=2:
+            self.interceptor_spawn_location=[19,5] #start from behind if funnel opening is covered with turrets
+
         # Calculate SP from last turn
         prev_turn_end_enemy_SP = self.enemy_end_turn_sp
         # Each turn players gain 5 SP
@@ -514,13 +517,19 @@ class AlgoStrategy(gamelib.AlgoCore):
             [26, 12],
         ]
         support_walls = []
-        game_state.attempt_spawn(WALL, [wall for wall in wall_locations if wall not in WALL_OPENINGS])
+        global WALL_OPENINGS
+        for wall_location in wall_locations:
+            if(wall_location not in WALL_OPENINGS):
+                game_state.attempt_spawn(WALL,wall_location) 
+            else:
+                WALL_OPENINGS.remove(wall_location)
         # 1st support
         support_locations = [[15, 1],[14, 0],[16, 2], [15, 2]]
         if game_state.turn_number == 1:
             game_state.attempt_spawn(SUPPORT, support_locations[self.support_index])
             self.support_index = (self.support_index + 1) % len(support_locations)
 
+        
         for x in range(6, 25):
             if x % 3 != 2 and not (21 <= x <= 22) and [x,y] not in WALL_OPENINGS:
                 if game_state.get_resources(0)[
@@ -536,6 +545,8 @@ class AlgoStrategy(gamelib.AlgoCore):
                         game_state.attempt_spawn(
                             WALL, [x, y]
                         )  # dont create dangling walls
+            elif [x,y] in WALL_OPENINGS:
+                WALL_OPENINGS.remove([x,y])
 
         sp_needed_to_replace_removed = 0
         # Check walls and turrets health and remove if less than equal to threshold
@@ -580,7 +591,7 @@ class AlgoStrategy(gamelib.AlgoCore):
 
         # Build turrets on the back
         (
-            game_state.attempt_spawn(TURRET, [21, 10])
+            game_state.attempt_spawn(TURRET, [22, 10])
             if sp_needed_to_replace_removed <= 7
             else None
         )
