@@ -163,7 +163,7 @@ class AttackManager:
         
         # Fixed parameters
        
-        w2 = 5 # Damage incurred weight
+        w2 = 3 # Damage incurred weight
         damage_threshold_multiplier = 7.5
         w_broken=- 15/(self.enemy_SP)**(0.5)   #weight for breaking enemy units,check if its negative
         
@@ -177,7 +177,7 @@ class AttackManager:
         w3 = w_broken/3  #brokenF_turret
         w4 = w_broken/4  # damage_given_to_wall
         w5=1.5           #for enemy sp
-        w6=2             # Support boosting weight
+        w6 = ((min(no_of_scouts,6)/6)**(1.1))* no_of_scouts * 0.55         # Support boosting weight
 
         DAMAGE_THRESHOLD = (no_of_scouts**1.1) * damage_threshold_multiplier
         
@@ -191,7 +191,7 @@ class AttackManager:
             if path:
                 support_boost = self.get_supports_boosting_scout(
                     game_state, path
-                ) * ((min(no_of_scouts,6)/6)**(1.1))* no_of_scouts*0.75
+                ) 
                 damage_incurred=0
                 broken_supports = 0
                 broken_turrets = 0
@@ -243,10 +243,10 @@ class AttackManager:
 
             if score_location_pairs:
                 # Sort by score (lower is better since we want to minimize damage taken)
-                score_location_pairs.sort()
+                score_location_pairs.sort(key = lambda x: x[0])
                 BEST_DEFENSE_SCORE = score_location_pairs[0][0]
                 BEST_SCOUT_SPAWN_LOCATION = score_location_pairs[0][1]
-                gamelib.debug_write(f"DEBUG: Best defense score: {BEST_DEFENSE_SCORE}")
+                gamelib.debug_write(f"DEBUG: Best defense score: {BEST_DEFENSE_SCORE} and location: {BEST_SCOUT_SPAWN_LOCATION}")
             else:
                 # Handle the case where no valid paths are found
                 BEST_DEFENSE_SCORE = 10000
@@ -254,9 +254,9 @@ class AttackManager:
                 gamelib.debug_write("DEBUG: No valid paths found")
 
         else:
+            score_location_pairs.sort(key = lambda x: x[0])
             if score_location_pairs:
-                score_location_pairs.sort()
-                gamelib.debug_write(f"DEBUG: Best defense score for wall remove: {score_location_pairs[0]}")
+                gamelib.debug_write(f"DEBUG: Best defense score on copy: {score_location_pairs[0][0]} and location: {score_location_pairs[0][1]}")
             return None if not score_location_pairs else score_location_pairs[0]
     
     def nowall_defense_score_checker(self, game_state, walls):
@@ -284,7 +284,7 @@ class AttackManager:
             game_state.game_map[x,y] = copy.deepcopy(placeholder)
         
         if any_nowall_data:
-            return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-150]
+            return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-50 and min_nowall_defense_score<15 and game_state.my_health>6]
         else:
             return []
 
