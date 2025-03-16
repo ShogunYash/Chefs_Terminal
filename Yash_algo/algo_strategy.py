@@ -30,8 +30,8 @@ class AttackManager:
         self.config = None
         
         # Fixed sigmoid parameters
-        self.sigmoid_center = 15
-        self.sigmoid_steepness = 0.1
+        self.sigmoid_center = 35
+        self.sigmoid_steepness = 0.06
 
 
     def enemy_stationary_units(self, game_state):
@@ -162,24 +162,25 @@ class AttackManager:
         score_location_pairs = []
         
         # Fixed parameters
-        w1 = -1  # Damage to supports weight
+       
         w2 = 1.3   # Damage incurred weight
         damage_threshold_multiplier = 7.5
+        w_broken=20/(self.enemy_SP)**(0.5)#weight for breaking enemy units
         
         # Calculate normalization factors
         no_of_scouts = int(self.my_MP // 1)
-        scout_normalising_factor = (no_of_scouts)**(0.7)*((min(game_state.enemy_health, 7))/7) ** (0.1)
-        scout_normalising_factor =1
-        w2 = w2 * scout_normalising_factor
-        w1 = w1 / scout_normalising_factor
+        scout_normalising_factor = (no_of_scouts/5)**(0.7)#inversly prop to damage incurred weight
+    #    *((min(game_state.enemy_health, 7))/7) ** (0.1)
+        w2 = w2 / scout_normalising_factor
+        # w_broken = w_broken / scout_normalising_factor
         
-        w3 = w1 / 4  # damage_given_to_turret
-        w4 = w3 / 2  # damage_given_to_wall
-        w5=2
+        w3 = w_broken  #brokenF_turret
+        w4 = w_broken  # damage_given_to_wall
+        w5=2#for enemy sp
 
         DAMAGE_THRESHOLD = (no_of_scouts) * damage_threshold_multiplier
         
-        gamelib.debug_write(f"DEBUG: Scout params - w1: {w1}, w2: {w2}, damage_threshold: {DAMAGE_THRESHOLD}")
+        gamelib.debug_write(f"DEBUG: Scout params - w_broken: {w_broken}, w2: {w2}, damage_threshold: {DAMAGE_THRESHOLD}")
 
         # Evaluate each possible spawn location
         for location in location_options:
@@ -190,9 +191,9 @@ class AttackManager:
                 damage_incurred = -self.get_supports_boosting_scout(
                     game_state, path
                 ) * (no_of_scouts)
-                damage_to_supports = 0
-                damage_to_turrets = 0
-                damage_to_walls = 0
+                broken_supports = 0
+                broken_turrets = 0
+                broken_walls = 0
                 path_is_safe = True
 
                 # Calculate damage along the path
@@ -212,15 +213,18 @@ class AttackManager:
                     target = game_state.get_target(gamelib.GameUnit(SCOUT, game_state.config, 0, None, x, y))
                     if target:
                         if target.unit_type == "EF":
-                            damage_to_supports += no_of_scouts*2  # less than 12 damage is useless
+                            if(target.health)<=2*no_of_scouts:
+                                broken_supports+=1
                         elif target.unit_type == "FF":
-                            damage_to_walls += no_of_scouts*2
+                            if(target.health)<=2*no_of_scouts:
+                                broken_walls+=1
                         elif target.unit_type == "DF":
-                            damage_to_turrets += no_of_scouts*2 
+                            if(target.health)<=2*no_of_scouts:
+                                broken_turrets+=1
 
                 # Only add to our list if the path is safe
                 if path_is_safe:
-                    defense_score = w1 * damage_to_supports + w2 * damage_incurred + w3 * damage_to_turrets + w4 * damage_to_walls+ w5*(self.enemy_SP)**(0.9)
+                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(self.enemy_SP)**(0.9)
                     score_location_pairs.append((defense_score, location))
 
         if not on_copy:
@@ -575,8 +579,13 @@ class AlgoStrategy(gamelib.AlgoCore):
             game_state.turn_number > 3
             and game_state.turn_number - self.last_support_turn > 1
             and sp_needed_to_replace_removed <= 6
-        ):
-            game_state.attempt_upgrade([support for support in support_locations if support.health>=9])
+        ):  
+            for location in support_locations:
+                if game_state.game_map[location[0],location[1]]:
+                    unit = game_state.game_map[location[0],location[1]][0]
+                    if(unit.health<=9):
+                        game_state.attempt_upgrade(location[0],location[1])
+            
             if game_state.attempt_spawn(SUPPORT, support_locations[self.support_index]):
                 self.support_index = (self.support_index + 1) % len(support_locations)
 
