@@ -163,13 +163,13 @@ class AttackManager:
         
         # Fixed parameters
        
-        w2 = 10   # Damage incurred weight
+        w2 = 3  # Damage incurred weight
         damage_threshold_multiplier = 7.5
         w_broken=- 15/(self.enemy_SP)**(0.2)   #weight for breaking enemy units,check if its negative
         
         # Calculate normalization factors
         no_of_scouts = int(math.floor(game_state.get_resources(0)[1]) // 1) + 2*on_copy
-        scout_normalising_factor = (no_of_scouts)**(0.9)#inversely prop to damage incurred weight
+        scout_normalising_factor = (no_of_scouts)**(0.4)#inversely prop to damage incurred weight
     #    *((min(game_state.enemy_health, 7))/7) ** (0.1)
         w2 = w2 / scout_normalising_factor
         # w_broken = w_broken / scout_normalising_factor
@@ -177,6 +177,7 @@ class AttackManager:
         w3 = w_broken/3  #brokenF_turret
         w4 = w_broken/4  # damage_given_to_wall
         w5=1.5#for enemy sp
+        w6=1
 
         DAMAGE_THRESHOLD = (no_of_scouts**1.1) * damage_threshold_multiplier
         
@@ -188,9 +189,10 @@ class AttackManager:
 
             # Only process locations that have a valid path
             if path:
-                damage_incurred = -self.get_supports_boosting_scout(
+                support_boost = self.get_supports_boosting_scout(
                     game_state, path
                 ) * ((min(no_of_scouts,6)/6)**(1.1))* no_of_scouts*0.75
+                damage_incurred=0
                 broken_supports = 0
                 broken_turrets = 0
                 broken_walls = 0
@@ -205,7 +207,7 @@ class AttackManager:
                     )
 
                     # Check if damage exceeds our threshold
-                    if damage_incurred >= DAMAGE_THRESHOLD:
+                    if w2*damage_incurred-w6*support_boost >= DAMAGE_THRESHOLD:
                         path_is_safe = False
                         break
                     # Calculate potential damage to enemy supports
@@ -232,7 +234,7 @@ class AttackManager:
                     items[0].health=items[1]
                 # Only add to our list if the path is safe
                 if path_is_safe:
-                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(max(self.enemy_SP-5,0))**(1.5)
+                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(max(self.enemy_SP-5,0))**(1.5)-w6*support_boost
                     score_location_pairs.append((defense_score, location))
 
         if not on_copy:
