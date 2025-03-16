@@ -163,19 +163,19 @@ class AttackManager:
         
         # Fixed parameters
        
-        w2 = 2.1   # Damage incurred weight
+        w2 = 10   # Damage incurred weight
         damage_threshold_multiplier = 7.5
-        w_broken=- 25/(self.enemy_SP)**(0.5)#weight for breaking enemy units,check if its negative
+        w_broken=- 15/(self.enemy_SP)**(0.2)   #weight for breaking enemy units,check if its negative
         
         # Calculate normalization factors
-        no_of_scouts = int(math.floor(game_state.get_resources(0)[1]) // 1) + 2.5*on_copy
+        no_of_scouts = int(math.floor(game_state.get_resources(0)[1]) // 1) + 2*on_copy
         scout_normalising_factor = (no_of_scouts)**(0.9)#inversely prop to damage incurred weight
     #    *((min(game_state.enemy_health, 7))/7) ** (0.1)
         w2 = w2 / scout_normalising_factor
         # w_broken = w_broken / scout_normalising_factor
         
-        w3 = w_broken  #brokenF_turret
-        w4 = w_broken  # damage_given_to_wall
+        w3 = w_broken/3  #brokenF_turret
+        w4 = w_broken/3  # damage_given_to_wall
         w5=1.5#for enemy sp
 
         DAMAGE_THRESHOLD = (no_of_scouts**1.1) * damage_threshold_multiplier
@@ -232,7 +232,7 @@ class AttackManager:
                     items[0].health=items[1]
                 # Only add to our list if the path is safe
                 if path_is_safe:
-                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(max(self.enemy_SP-5,0))**(2)
+                    defense_score = w_broken * broken_supports + w2 * damage_incurred + w3 * broken_turrets + w4 * broken_walls+ w5*(max(self.enemy_SP-5,0))**(1.5)
                     score_location_pairs.append((defense_score, location))
 
         if not on_copy:
