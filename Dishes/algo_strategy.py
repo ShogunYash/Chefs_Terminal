@@ -30,7 +30,7 @@ class AttackManager:
         self.config = None
         
         # Fixed sigmoid parameters
-        self.sigmoid_center = 25
+        self.sigmoid_center = 30
         self.sigmoid_steepness = 0.06
 
 
@@ -170,7 +170,7 @@ class AttackManager:
         # Calculate normalization factors
         no_of_scouts = int(math.floor(game_state.get_resources(0)[1]) // 1) + 4*on_copy
         # scout_normalising_factor = (no_of_scouts)**(0.5)   #inversely prop to damage incurred weight
-        scout_normalising_factor = (((min(8,no_of_scouts+1)/8)**-1.3)*no_of_scouts)**(0.8)  #inversely prop to damage incurred weight
+        scout_normalising_factor = (((min(9,no_of_scouts+1)/9)**3.3)*no_of_scouts)**(0.8)  #inversely prop to damage incurred weight
     #    *((min(game_state.enemy_health, 7))/7) ** (0.1)
         w2 = w2 / scout_normalising_factor
         # w_broken = w_broken / scout_normalising_factor
@@ -178,7 +178,7 @@ class AttackManager:
         w3 = w_broken/3  #brokenF_turret
         w4 = w_broken/4  # damage_given_to_wall
         w5=1.5           #for enemy sp
-        w6 = ((min(no_of_scouts,6)/6)**(1.1))* no_of_scouts * 0.75       # Support boosting weight
+        w6 = ((min(no_of_scouts,6)/6)**(1.1))* no_of_scouts * 0.83      # Support boosting weight
 
         DAMAGE_THRESHOLD = (no_of_scouts**1.1) * damage_threshold_multiplier
         
@@ -285,7 +285,7 @@ class AttackManager:
             game_state.game_map[x,y] = copy.deepcopy(placeholder)
         
         if any_nowall_data:
-            return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-50 and min_nowall_defense_score<15 and game_state.my_health>6]
+            return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-50 and min_nowall_defense_score<0 and game_state.my_health>6]
         else:
             return []
 
