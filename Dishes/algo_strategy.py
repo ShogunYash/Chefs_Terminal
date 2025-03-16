@@ -106,7 +106,7 @@ class AttackManager:
         path = game_state.find_path_to_edge(start_location)
         path = [location for location in path if location[1] < 16]
         gamelib.debug_write("path", path)
-        if len(path) >= 16:
+        if len(path) >= 36:
             self.interceptor_spawn_location = [2, 11]
 
     def sigmoid_decreasing(self, x, center=None, steepness=None):
@@ -301,7 +301,7 @@ class AttackManager:
         self.interceptor_spawn_location = (
             [21, 7] if game_state.contains_stationary_unit([19, 12]) else [25, 11]
         )
-        if len(game_state.get_attackers((22,13),0))>=2:
+        if len(game_state.get_attackers((22,12),0))>=2:
             self.interceptor_spawn_location=[19,5] #start from behind if funnel opening is covered with turrets
 
         # Calculate SP from last turn
@@ -411,7 +411,8 @@ class AttackManager:
 
         # Check if we can remove a wall to improve the defense_score
         walls = self.my_stationary_units(game_state)['walls']
-        walls = [unit for unit in walls if unit.x<=10]
+        walls = [unit for unit in walls if (unit.x<=10 and [unit.x,unit.y]!=[1,12]) or unit.x>=25]
+
         new = self.nowall_defense_score_checker(game_state, walls)
         if new:
             new_defense_score, nowall_location, new_spawn_location = new
