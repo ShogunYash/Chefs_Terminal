@@ -30,7 +30,7 @@ class AttackManager:
         self.config = None
         
         # Fixed sigmoid parameters
-        self.sigmoid_center = 35
+        self.sigmoid_center = 30
         self.sigmoid_steepness = 0.06
 
 
@@ -106,7 +106,7 @@ class AttackManager:
         path = game_state.find_path_to_edge(start_location)
         path = [location for location in path if location[1] < 16]
         gamelib.debug_write("path", path)
-        if len(path) >= 16:
+        if len(path) >= 36:
             self.interceptor_spawn_location = [2, 11]
 
     def sigmoid_decreasing(self, x, center=None, steepness=None):
@@ -163,13 +163,14 @@ class AttackManager:
         
         # Fixed parameters
        
-        w2 = 3 # Damage incurred weight
+        w2 = 2 # Damage incurred weight
         damage_threshold_multiplier = 7.5
-        w_broken=- 15/(self.enemy_SP)**(0.5)   #weight for breaking enemy units,check if its negative
+        w_broken=- 13/(self.enemy_SP)**(0.5)   #weight for breaking enemy units,check if its negative
         
         # Calculate normalization factors
-        no_of_scouts = int(math.floor(game_state.get_resources(0)[1]) // 1) + 2*on_copy
-        scout_normalising_factor = (no_of_scouts)**(0.5)   #inversely prop to damage incurred weight
+        no_of_scouts = int(math.floor(game_state.get_resources(0)[1]) // 1) + 4*on_copy
+        # scout_normalising_factor = (no_of_scouts)**(0.5)   #inversely prop to damage incurred weight
+        scout_normalising_factor = (((min(10,no_of_scouts+1)/10)**2.7)*no_of_scouts)**(0.8)  #inversely prop to damage incurred weight
     #    *((min(game_state.enemy_health, 7))/7) ** (0.1)
         w2 = w2 / scout_normalising_factor
         # w_broken = w_broken / scout_normalising_factor
@@ -177,7 +178,7 @@ class AttackManager:
         w3 = w_broken/3  #brokenF_turret
         w4 = w_broken/4  # damage_given_to_wall
         w5=1.5           #for enemy sp
-        w6 = ((min(no_of_scouts,6)/6)**(1.1))* no_of_scouts * 0.55         # Support boosting weight
+        w6 = ((min(no_of_scouts,6)/6)**(1.1))* no_of_scouts * 0.83      # Support boosting weight
 
         DAMAGE_THRESHOLD = (no_of_scouts**1.1) * damage_threshold_multiplier
         
@@ -284,7 +285,7 @@ class AttackManager:
             game_state.game_map[x,y] = copy.deepcopy(placeholder)
         
         if any_nowall_data:
-            return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-50 and min_nowall_defense_score<15 and game_state.my_health>6]
+            return [[], [min_nowall_defense_score, best_nowall_location, best_nowall_spawn_location]][min_nowall_defense_score<BEST_DEFENSE_SCORE-50 and min_nowall_defense_score<0 and game_state.my_health>6]
         else:
             return []
 
@@ -300,7 +301,7 @@ class AttackManager:
         self.interceptor_spawn_location = (
             [21, 7] if game_state.contains_stationary_unit([19, 12]) else [25, 11]
         )
-        if len(game_state.get_attackers((22,13),0))>=2:
+        if len(game_state.get_attackers((22,12),0))>=2:
             self.interceptor_spawn_location=[19,5] #start from behind if funnel opening is covered with turrets
 
         # Calculate SP from last turn
@@ -380,6 +381,9 @@ class AttackManager:
         global BEST_SCOUT_SPAWN_LOCATION, BEST_DEFENSE_SCORE, WALL_OPENINGS
         best_spawn_location = BEST_SCOUT_SPAWN_LOCATION
         best_defense_score = BEST_DEFENSE_SCORE
+        for openings in WALL_OPENINGS:
+            if(opening not in game_state.find_path_to_edge(best_spawn_location)):
+                game_state.attempt_spawn(WALL,opening)
         
         # Use the simplified sigmoid function
         scout_sending_factor = self.sigmoid_decreasing(best_defense_score)
@@ -410,7 +414,8 @@ class AttackManager:
 
         # Check if we can remove a wall to improve the defense_score
         walls = self.my_stationary_units(game_state)['walls']
-        walls = [unit for unit in walls if unit.x<=10]
+        walls = [unit for unit in walls if (unit.x<=10 and [unit.x,unit.y]!=[1,12]) or unit.x>=25]
+
         new = self.nowall_defense_score_checker(game_state, walls)
         if new:
             new_defense_score, nowall_location, new_spawn_location = new
@@ -521,7 +526,10 @@ class AlgoStrategy(gamelib.AlgoCore):
             [26, 12],
         ]
         support_walls = []
+        sp_needed_to_replace_removed = 0
         global WALL_OPENINGS
+        if(WALL_OPENINGS):
+            sp_needed_to_replace_removed+=2
         for wall_location in wall_locations:
             if(wall_location not in WALL_OPENINGS):
                 game_state.attempt_spawn(WALL,wall_location) 
@@ -552,7 +560,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             elif [x,y] in WALL_OPENINGS:
                 WALL_OPENINGS.remove([x,y])
 
-        sp_needed_to_replace_removed = 0
+        
         # Check walls and turrets health and remove if less than equal to threshold
         for x in range(1, 26):
             if game_state.game_map[x, y] and game_state.turn_number >= 3:
