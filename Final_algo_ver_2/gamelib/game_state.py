@@ -612,6 +612,7 @@ class GameState:
                     target_health = unit_health
                     target_y = unit_y
                     target_x_distance = unit_x_distance
+                    
         return target
 
     def get_attackers(self, location, player_index):

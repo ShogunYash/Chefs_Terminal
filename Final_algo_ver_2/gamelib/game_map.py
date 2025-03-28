@@ -18,8 +18,8 @@ class GameMap:
         * TOP_LEFT (int): A constant that represents the top left edge
         * BOTTOM_LEFT (int): Hidden challenge! Can you guess what this constant represents???
         * BOTTOM_RIGHT (int): A constant that represents the bottom right edge
-
     """
+    
     def __init__(self, config):
         """Initializes constants and game map
 
